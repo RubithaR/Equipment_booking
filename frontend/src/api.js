@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getToken, logout } from './auth';
 
 // All requests go through the API Gateway (port 8080)
-export const API_BASE = 'http://localhost:8080';
+export const API_BASE = 'https://user-service-production-c390.up.railway.app';
 
 const api = axios.create({
   baseURL: API_BASE,

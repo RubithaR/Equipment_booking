@@ -44,3 +44,5 @@ note.txt
 *.pdf
 skills-lock.json
 .claude/
+.agents
+.metadata

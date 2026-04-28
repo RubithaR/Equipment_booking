@@ -29,6 +29,14 @@ public class UserController {
         return ResponseEntity.ok(userService.login(body.get("email"), body.get("password")));
     }
 
+    @GetMapping("/check-availability")
+    public ResponseEntity<Map<String, Boolean>> checkAvailability(
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String enNumber,
+            @RequestParam(required = false) String indexNumber) {
+        return ResponseEntity.ok(userService.checkAvailability(email, enNumber, indexNumber));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getById(id));

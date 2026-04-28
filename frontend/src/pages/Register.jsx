@@ -3,6 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { userApi, errMsg } from '../api';
 import AuthBrand from '../components/AuthBrand';
 
+const UNI_DOMAIN = '@foe.sjp.ac.lk';
+const ALLOWED_LOGIN_DOMAINS = ['@gmail.com', UNI_DOMAIN];
+
 export default function Register() {
   const nav = useNavigate();
   const [role, setRole] = useState('STUDENT');
@@ -21,21 +24,83 @@ export default function Register() {
   const [enNumber, setEnNumber] = useState('');
   const [indexNumber, setIndexNumber] = useState('');
   const [nameWithInitial, setNameWithInitial] = useState('');
-  const [uniEmail, setUniEmail] = useState('');
+  const [uniEmailPrefix, setUniEmailPrefix] = useState('');
 
   const [agreed, setAgreed] = useState(false);
+
+  // Inline duplicate-check errors
+  const [emailErr, setEmailErr] = useState('');
+  const [enErr, setEnErr] = useState('');
+  const [indexErr, setIndexErr] = useState('');
+
+  // Inline format errors
+  const [emailFmtErr, setEmailFmtErr] = useState('');
+  const [phoneErr, setPhoneErr] = useState('');
+  const [enFmtErr, setEnFmtErr] = useState('');
+  const [uniEmailFmtErr, setUniEmailFmtErr] = useState('');
+
+  const validateEmailFormat = () => {
+    if (!email) { setEmailFmtErr(''); return; }
+    const ok = ALLOWED_LOGIN_DOMAINS.some((d) => email.toLowerCase().endsWith(d));
+    setEmailFmtErr(ok ? '' : 'Email must end with @gmail.com or @foe.sjp.ac.lk');
+  };
+
+  const validatePhone = () => {
+    if (!phoneNumber) { setPhoneErr(''); return; }
+    const ok = phoneNumber.length === 9
+      || (phoneNumber.length === 10 && phoneNumber.startsWith('0'));
+    setPhoneErr(ok ? '' : 'Phone must be 9 digits, or 10 digits starting with 0');
+  };
+
+  const validateEnFormat = () => {
+    if (!enNumber) { setEnFmtErr(''); return; }
+    setEnFmtErr(/^EN\d{6}$/.test(enNumber) ? '' : 'Format: EN followed by 6 digits (e.g., EN102752)');
+  };
+
+  const validateUniEmailFormat = () => {
+    if (!uniEmailPrefix) { setUniEmailFmtErr(''); return; }
+    setUniEmailFmtErr(/^en\d{6}$/.test(uniEmailPrefix) ? '' : 'Format: en + 6 digits (e.g., en102752)');
+  };
+
+  const checkEmail = async () => {
+    validateEmailFormat();
+    if (!email) { setEmailErr(''); return; }
+    try {
+      const { data } = await userApi.checkAvailability({ email });
+      setEmailErr(data.emailTaken ? 'Email already registered' : '');
+    } catch { /* ignore network blips while typing */ }
+  };
+
+  const checkEn = async () => {
+    validateEnFormat();
+    if (!enNumber) { setEnErr(''); return; }
+    try {
+      const { data } = await userApi.checkAvailability({ enNumber });
+      setEnErr(data.enTaken ? 'EN number already registered' : '');
+    } catch { /* ignore */ }
+  };
+
+  const checkIndex = async () => {
+    if (!indexNumber) { setIndexErr(''); return; }
+    try {
+      const { data } = await userApi.checkAvailability({ indexNumber });
+      setIndexErr(data.indexTaken ? 'Index number already registered' : '');
+    } catch { /* ignore */ }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     setError(''); setSuccess(''); setBusy(true);
     try {
+      const uniEmail = uniEmailPrefix ? uniEmailPrefix + UNI_DOMAIN : '';
       const payload = {
         email, password, fullName, role, department, phoneNumber,
         ...(role === 'STUDENT' && { enNumber, indexNumber, nameWithInitial, uniEmail }),
       };
       await userApi.register(payload);
       if (role === 'INSTRUCTOR') {
-        setSuccess('Account created. Awaiting admin approval — you will be notified.');
+        setSuccess('Account created. Awaiting admin approval — you will be notified. Redirecting to sign in…');
+        setTimeout(() => nav('/login'), 3000);
       } else {
         setSuccess('Account created. Redirecting to sign in…');
         setTimeout(() => nav('/login'), 1500);
@@ -46,6 +111,10 @@ export default function Register() {
       setBusy(false);
     }
   };
+
+  const submitDisabled = busy || !agreed
+    || !!emailErr || !!enErr || !!indexErr
+    || !!emailFmtErr || !!phoneErr || !!enFmtErr || !!uniEmailFmtErr;
 
   return (
     <div className="auth-wrap">
@@ -98,14 +167,26 @@ export default function Register() {
             <div className="field">
               <label>Email (used for login)</label>
               <input type="email" value={email} required
-                     onChange={(e) => setEmail(e.target.value)}
+                     onChange={(e) => {
+                       setEmail(e.target.value);
+                       setEmailErr(''); setEmailFmtErr('');
+                     }}
+                     onBlur={checkEmail}
                      placeholder="you@gmail.com" />
+              {emailFmtErr && <span className="field-error">{emailFmtErr}</span>}
+              {!emailFmtErr && emailErr && <span className="field-error">{emailErr}</span>}
             </div>
             <div className="field">
               <label>Phone Number</label>
-              <input value={phoneNumber}
-                     onChange={(e) => setPhoneNumber(e.target.value)}
-                     placeholder="07XXXXXXXX" />
+              <input value={phoneNumber} required inputMode="numeric"
+                     onChange={(e) => {
+                       const v = e.target.value.replace(/\D/g, '').slice(0, 10);
+                       setPhoneNumber(v);
+                       setPhoneErr('');
+                     }}
+                     onBlur={validatePhone}
+                     placeholder="0763341476 or 763341476" />
+              {phoneErr && <span className="field-error">{phoneErr}</span>}
             </div>
           </div>
 
@@ -115,28 +196,49 @@ export default function Register() {
                 <div className="field">
                   <label>EN Number</label>
                   <input value={enNumber} required
-                         onChange={(e) => setEnNumber(e.target.value)}
+                         onChange={(e) => {
+                           const v = e.target.value.toUpperCase().slice(0, 8);
+                           setEnNumber(v);
+                           setEnErr(''); setEnFmtErr('');
+                         }}
+                         onBlur={checkEn}
                          placeholder="EN102752" />
+                  {enFmtErr && <span className="field-error">{enFmtErr}</span>}
+                  {!enFmtErr && enErr && <span className="field-error">{enErr}</span>}
                 </div>
                 <div className="field">
                   <label>Index Number</label>
                   <input value={indexNumber} required
-                         onChange={(e) => setIndexNumber(e.target.value)}
+                         onChange={(e) => {
+                           setIndexNumber(e.target.value.toUpperCase());
+                           setIndexErr('');
+                         }}
+                         onBlur={checkIndex}
                          placeholder="21ENG009" />
+                  {indexErr && <span className="field-error">{indexErr}</span>}
                 </div>
               </div>
               <div className="field-row">
                 <div className="field">
                   <label>Name with Initial</label>
                   <input value={nameWithInitial} required
-                         onChange={(e) => setNameWithInitial(e.target.value)}
-                         placeholder="A. Harishan" />
+                         onChange={(e) => setNameWithInitial(e.target.value.toUpperCase())}
+                         placeholder="A. HARISHAN" />
                 </div>
                 <div className="field">
                   <label>University Email</label>
-                  <input type="email" value={uniEmail} required
-                         onChange={(e) => setUniEmail(e.target.value)}
-                         placeholder="en102752@feo.sjp.ac.lk" />
+                  <div className="email-split">
+                    <input value={uniEmailPrefix} required
+                           onChange={(e) => {
+                             const v = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+                             setUniEmailPrefix(v);
+                             setUniEmailFmtErr('');
+                           }}
+                           onBlur={validateUniEmailFormat}
+                           placeholder="en102752" />
+                    <span className="email-suffix">{UNI_DOMAIN}</span>
+                  </div>
+                  {uniEmailFmtErr && <span className="field-error">{uniEmailFmtErr}</span>}
                 </div>
               </div>
             </>
@@ -157,7 +259,8 @@ export default function Register() {
             </span>
           </label>
 
-          <button type="submit" className="btn-pill btn-pill-solid btn-pill-lg btn-pill-block" disabled={busy || !agreed}>
+          <button type="submit" className="btn-pill btn-pill-solid btn-pill-lg btn-pill-block"
+                  disabled={submitDisabled}>
             {busy ? 'Creating…' : 'Create account →'}
           </button>
         </form>

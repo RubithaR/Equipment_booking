@@ -1,6 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
 import uniLogo from '../assets/Uni_logo.png';
-import heroImg from '../assets/hero.png';
 import { getCurrentUser, homePathFor } from '../auth';
 
 export default function Home() {
@@ -121,7 +120,6 @@ export default function Home() {
             </div>
 
             <div className="hero-bg-blob" aria-hidden="true" />
-            <img src={heroImg} alt="" className="hero-bg-img" aria-hidden="true" />
           </div>
         </div>
       </section>

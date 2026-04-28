@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -41,7 +42,7 @@ public class UserService {
             throw new BadRequestException("Role must be STUDENT or INSTRUCTOR (admin is preset).");
         }
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new ConflictException("Email already registered: " + request.getEmail());
+            throw new ConflictException("Email already registered");
         }
 
         User user = new User();
@@ -58,6 +59,12 @@ public class UserService {
                     || isBlank(request.getNameWithInitial()) || isBlank(request.getUniEmail())) {
                 throw new BadRequestException(
                         "Student registration requires: enNumber, indexNumber, nameWithInitial, uniEmail");
+            }
+            if (userRepository.existsByEnNumber(request.getEnNumber())) {
+                throw new ConflictException("EN number already registered");
+            }
+            if (userRepository.existsByIndexNumber(request.getIndexNumber())) {
+                throw new ConflictException("Index number already registered");
             }
             user.setEnNumber(request.getEnNumber());
             user.setIndexNumber(request.getIndexNumber());
@@ -139,6 +146,14 @@ public class UserService {
             throw new BadRequestException("User is not an instructor");
         }
         userRepository.delete(user);
+    }
+
+    public Map<String, Boolean> checkAvailability(String email, String enNumber, String indexNumber) {
+        Map<String, Boolean> result = new HashMap<>();
+        result.put("emailTaken", !isBlank(email) && userRepository.existsByEmail(email));
+        result.put("enTaken", !isBlank(enNumber) && userRepository.existsByEnNumber(enNumber));
+        result.put("indexTaken", !isBlank(indexNumber) && userRepository.existsByIndexNumber(indexNumber));
+        return result;
     }
 
     private boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }

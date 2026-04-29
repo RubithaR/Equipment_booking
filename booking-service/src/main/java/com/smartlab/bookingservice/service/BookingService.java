@@ -1,17 +1,17 @@
 package com.smartlab.bookingservice.service;
 
 import com.smartlab.bookingservice.client.EquipmentClient;
-import com.smartlab.bookingservice.client.NotificationClient;
 import com.smartlab.bookingservice.client.UserClient;
 import com.smartlab.bookingservice.dto.BookingRequest;
 import com.smartlab.bookingservice.dto.EquipmentDto;
-import com.smartlab.bookingservice.dto.NotificationDto;
 import com.smartlab.bookingservice.dto.ReviewRequest;
 import com.smartlab.bookingservice.dto.UserDto;
 import com.smartlab.bookingservice.entity.Booking;
 import com.smartlab.bookingservice.exception.BadRequestException;
 import com.smartlab.bookingservice.exception.ConflictException;
 import com.smartlab.bookingservice.exception.NotFoundException;
+import com.smartlab.bookingservice.notifier.NotificationEvent;
+import com.smartlab.bookingservice.notifier.Notifier;
 import com.smartlab.bookingservice.repository.BookingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final UserClient userClient;
     private final EquipmentClient equipmentClient;
-    private final NotificationClient notificationClient;
+    private final Notifier notifier;
 
     public Booking createBooking(BookingRequest request) {
         if (request.getStartTime() == null || request.getEndTime() == null) {
@@ -42,7 +42,6 @@ public class BookingService {
             throw new BadRequestException("endTime must be after startTime");
         }
 
-        // Verify student exists
         UserDto student;
         try {
             student = userClient.getUserById(request.getUserId());
@@ -50,7 +49,6 @@ public class BookingService {
             throw new NotFoundException("User not found with id: " + request.getUserId());
         }
 
-        // Verify equipment exists
         EquipmentDto equipment;
         try {
             equipment = equipmentClient.getEquipmentById(request.getEquipmentId());
@@ -83,26 +81,10 @@ public class BookingService {
         booking.setCreatedAt(LocalDateTime.now());
         Booking saved = bookingRepository.save(booking);
 
-        // Notify the student that their request was submitted
-        sendNotification(saved.getUserId(),
-                "Booking submitted",
-                "Your booking #" + saved.getId() + " for " + equipment.getName()
-                        + " is awaiting instructor approval.",
-                "BOOKING_SUBMITTED");
-
-        // Notify all instructors that a new booking needs review
-        try {
-            List<UserDto> instructors = userClient.getByRole("INSTRUCTOR");
-            for (UserDto inst : instructors) {
-                sendNotification(inst.getId(),
-                        "New booking awaiting review",
-                        student.getFullName() + " requested " + equipment.getName()
-                                + " from " + saved.getStartTime() + " to " + saved.getEndTime() + ".",
-                        "BOOKING_NEEDS_REVIEW");
-            }
-        } catch (Exception e) {
-            System.err.println("Warning: failed to notify instructors: " + e.getMessage());
-        }
+        notifier.publish(new NotificationEvent.BookingSubmitted(
+                saved.getId(), saved.getUserId(),
+                student.getFullName(), equipment.getName(),
+                saved.getStartTime(), saved.getEndTime()));
 
         return saved;
     }
@@ -125,10 +107,7 @@ public class BookingService {
             System.err.println("Warning: failed to update equipment status: " + e.getMessage());
         }
 
-        sendNotification(booking.getUserId(),
-                "Booking approved",
-                "Your booking #" + booking.getId() + " has been approved by instructor.",
-                "BOOKING_APPROVED");
+        notifier.publish(new NotificationEvent.BookingApproved(saved.getId(), saved.getUserId()));
         return saved;
     }
 
@@ -143,11 +122,8 @@ public class BookingService {
         booking.setReviewNote(review.getNote());
         Booking saved = bookingRepository.save(booking);
 
-        sendNotification(booking.getUserId(),
-                "Booking rejected",
-                "Your booking #" + booking.getId() + " was rejected by instructor."
-                        + (review.getNote() != null ? " Reason: " + review.getNote() : ""),
-                "BOOKING_REJECTED");
+        notifier.publish(new NotificationEvent.BookingRejected(
+                saved.getId(), saved.getUserId(), review.getNote()));
         return saved;
     }
 
@@ -186,18 +162,7 @@ public class BookingService {
             }
         }
 
-        sendNotification(booking.getUserId(),
-                "Booking cancelled",
-                "Your booking #" + booking.getId() + " has been cancelled.",
-                "BOOKING_CANCELLED");
+        notifier.publish(new NotificationEvent.BookingCancelled(updated.getId(), updated.getUserId()));
         return updated;
-    }
-
-    private void sendNotification(Long userId, String title, String message, String type) {
-        try {
-            notificationClient.send(new NotificationDto(userId, title, message, type));
-        } catch (Exception e) {
-            System.err.println("Warning: failed to send notification: " + e.getMessage());
-        }
     }
 }

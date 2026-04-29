@@ -1,0 +1,79 @@
+# =============================================================================
+# Smart Lab — local development orchestration
+# Run all 6 backend services with one command:  docker compose up
+# Stop everything:                              docker compose down
+# Rebuild after code changes:                   docker compose up --build
+# Run frontend separately:                      cd frontend && npm run dev
+# =============================================================================
+
+services:
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: smartlab-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      - EUREKA_HOSTNAME=eureka-server
+    networks: [smartlab]
+
+  user-service:
+    build: ./user-service
+    container_name: smartlab-user
+    ports:
+      - "8081:8081"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:-ThisIsASecretKeyForSmartLabEquipmentBookingSystemMustBeAtLeast32Bytes}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@smartlab.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin123}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  equipment-service:
+    build: ./equipment-service
+    container_name: smartlab-equipment
+    ports:
+      - "8082:8082"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  booking-service:
+    build: ./booking-service
+    container_name: smartlab-booking
+    ports:
+      - "8083:8083"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  notification-service:
+    build: ./notification-service
+    container_name: smartlab-notification
+    ports:
+      - "8084:8084"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: smartlab-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+    depends_on: [eureka-server, user-service]
+    networks: [smartlab]
+
+networks:
+  smartlab:
+    driver: bridge

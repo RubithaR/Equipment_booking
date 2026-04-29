@@ -1,6 +1,5 @@
 package com.smartlab.userservice.service;
 
-import com.smartlab.userservice.client.NotificationClient;
 import com.smartlab.userservice.dto.AuthResponse;
 import com.smartlab.userservice.dto.UserRequest;
 import com.smartlab.userservice.dto.UserResponse;
@@ -9,6 +8,8 @@ import com.smartlab.userservice.exception.BadRequestException;
 import com.smartlab.userservice.exception.ConflictException;
 import com.smartlab.userservice.exception.NotFoundException;
 import com.smartlab.userservice.exception.UnauthorizedException;
+import com.smartlab.userservice.notifier.NotificationEvent;
+import com.smartlab.userservice.notifier.Notifier;
 import com.smartlab.userservice.repository.UserRepository;
 import com.smartlab.userservice.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -34,7 +35,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    private final NotificationClient notificationClient;
+    private final Notifier notifier;
 
     public UserResponse register(UserRequest request) {
         String role = request.getRole() == null ? "" : request.getRole().toUpperCase();
@@ -125,17 +126,7 @@ public class UserService {
         user.setStatus(STATUS_ACTIVE);
         User saved = userRepository.save(user);
 
-        // Notify the instructor (in-app notification — also serves as the "permission email")
-        try {
-            notificationClient.send(Map.of(
-                    "userId", saved.getId(),
-                    "title", "Instructor account approved",
-                    "message", "Your account has been approved by admin. You can now log in.",
-                    "type", "ACCOUNT_APPROVED"
-            ));
-        } catch (Exception e) {
-            System.err.println("Warning: failed to send approval notification: " + e.getMessage());
-        }
+        notifier.publish(new NotificationEvent.InstructorApproved(saved.getId()));
         return UserResponse.from(saved);
     }
 

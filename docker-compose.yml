@@ -18,7 +18,9 @@ services:
     networks: [smartlab]
 
   user-service:
-    build: ./user-service
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
     container_name: smartlab-user
     ports:
       - "8081:8081"
@@ -26,13 +28,25 @@ services:
       - EUREKA_URL=http://eureka-server:8761/eureka/
       - DB_PASSWORD=${DB_PASSWORD}
       - JWT_SECRET=${JWT_SECRET:-ThisIsASecretKeyForSmartLabEquipmentBookingSystemMustBeAtLeast32Bytes}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@smartlab.local}
+      # Main admin
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@foe.sjp.ac.lk}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin123}
+      # Department admins (one per department, all optional — leave blank to skip)
+      - DEPT_ADMIN_COMPUTER_EMAIL=${DEPT_ADMIN_COMPUTER_EMAIL:-}
+      - DEPT_ADMIN_COMPUTER_PASSWORD=${DEPT_ADMIN_COMPUTER_PASSWORD:-}
+      - DEPT_ADMIN_ELECTRICAL_EMAIL=${DEPT_ADMIN_ELECTRICAL_EMAIL:-}
+      - DEPT_ADMIN_ELECTRICAL_PASSWORD=${DEPT_ADMIN_ELECTRICAL_PASSWORD:-}
+      - DEPT_ADMIN_MECHANICAL_EMAIL=${DEPT_ADMIN_MECHANICAL_EMAIL:-}
+      - DEPT_ADMIN_MECHANICAL_PASSWORD=${DEPT_ADMIN_MECHANICAL_PASSWORD:-}
+      - DEPT_ADMIN_CIVIL_EMAIL=${DEPT_ADMIN_CIVIL_EMAIL:-}
+      - DEPT_ADMIN_CIVIL_PASSWORD=${DEPT_ADMIN_CIVIL_PASSWORD:-}
     depends_on: [eureka-server]
     networks: [smartlab]
 
   equipment-service:
-    build: ./equipment-service
+    build:
+      context: .
+      dockerfile: equipment-service/Dockerfile
     container_name: smartlab-equipment
     ports:
       - "8082:8082"
@@ -43,7 +57,9 @@ services:
     networks: [smartlab]
 
   booking-service:
-    build: ./booking-service
+    build:
+      context: .
+      dockerfile: booking-service/Dockerfile
     container_name: smartlab-booking
     ports:
       - "8083:8083"
@@ -54,13 +70,16 @@ services:
     networks: [smartlab]
 
   notification-service:
-    build: ./notification-service
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
     container_name: smartlab-notification
     ports:
       - "8084:8084"
     environment:
       - EUREKA_URL=http://eureka-server:8761/eureka/
       - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:-ThisIsASecretKeyForSmartLabEquipmentBookingSystemMustBeAtLeast32Bytes}
     depends_on: [eureka-server]
     networks: [smartlab]
 

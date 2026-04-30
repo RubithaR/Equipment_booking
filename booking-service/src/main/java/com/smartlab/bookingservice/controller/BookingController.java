@@ -1,9 +1,11 @@
 package com.smartlab.bookingservice.controller;
 
+import com.smartlab.bookingservice.dto.AttachmentResponse;
 import com.smartlab.bookingservice.dto.BookingRequest;
-import com.smartlab.bookingservice.dto.ReviewRequest;
-import com.smartlab.bookingservice.entity.Booking;
+import com.smartlab.bookingservice.dto.BookingResponse;
+import com.smartlab.bookingservice.dto.EventResponse;
 import com.smartlab.bookingservice.service.BookingService;
+import com.smartlab.bookingservice.transition.Transition;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,47 +21,59 @@ public class BookingController {
     private final BookingService bookingService;
 
     @PostMapping
-    public ResponseEntity<Booking> create(@Valid @RequestBody BookingRequest request) {
-        return ResponseEntity.ok(bookingService.createBooking(request));
-    }
-
-    @GetMapping
-    public ResponseEntity<List<Booking>> getAll() {
-        return ResponseEntity.ok(bookingService.getAll());
+    public ResponseEntity<BookingResponse> create(@Valid @RequestBody BookingRequest request) {
+        return ResponseEntity.ok(bookingService.create(request));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Booking> getById(@PathVariable Long id) {
+    public ResponseEntity<BookingResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(bookingService.getById(id));
     }
 
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<List<Booking>> getByUserId(@PathVariable Long userId) {
-        return ResponseEntity.ok(bookingService.getByUserId(userId));
+    @GetMapping("/{id}/timeline")
+    public ResponseEntity<List<EventResponse>> timeline(@PathVariable Long id) {
+        return ResponseEntity.ok(bookingService.timeline(id));
     }
 
-    // Useful for instructor: GET /api/bookings/status/PENDING_APPROVAL
-    @GetMapping("/status/{status}")
-    public ResponseEntity<List<Booking>> getByStatus(@PathVariable String status) {
-        return ResponseEntity.ok(bookingService.getByStatus(status));
+    @GetMapping("/{id}/attachments")
+    public ResponseEntity<List<AttachmentResponse>> attachments(@PathVariable Long id) {
+        return ResponseEntity.ok(bookingService.attachments(id));
     }
 
-    // Instructor approves a pending booking
-    @PatchMapping("/{id}/approve")
-    public ResponseEntity<Booking> approve(@PathVariable Long id,
-                                           @Valid @RequestBody ReviewRequest review) {
-        return ResponseEntity.ok(bookingService.approve(id, review));
+    @GetMapping("/mine")
+    public ResponseEntity<List<BookingResponse>> mine() {
+        return ResponseEntity.ok(bookingService.listForCurrentStudent());
     }
 
-    // Instructor rejects a pending booking
-    @PatchMapping("/{id}/reject")
-    public ResponseEntity<Booking> reject(@PathVariable Long id,
-                                          @Valid @RequestBody ReviewRequest review) {
-        return ResponseEntity.ok(bookingService.reject(id, review));
+    @GetMapping("/assigned-to-me")
+    public ResponseEntity<List<BookingResponse>> assignedToMe() {
+        return ResponseEntity.ok(bookingService.listForCurrentInstructor());
     }
 
-    @PatchMapping("/{id}/cancel")
-    public ResponseEntity<Booking> cancel(@PathVariable Long id) {
-        return ResponseEntity.ok(bookingService.cancelBooking(id));
+    @GetMapping("/awaiting-my-supervision")
+    public ResponseEntity<List<BookingResponse>> awaitingMySupervision() {
+        return ResponseEntity.ok(bookingService.listForCurrentSupervisor());
+    }
+
+    @GetMapping
+    public ResponseEntity<List<BookingResponse>> listAll(@RequestParam(required = false) String state) {
+        return ResponseEntity.ok(bookingService.listAll(state));
+    }
+
+    /**
+     * Single umbrella endpoint for every per-line state transition. Body is a
+     * polymorphic {@link Transition}: {@code { "type": "APPROVE_DIRECTLY", ... }}.
+     * Replaces the 9 endpoints that previously mirrored each transition by name.
+     */
+    @PostMapping("/{id}/items/{itemId}/transition")
+    public ResponseEntity<BookingResponse> transition(@PathVariable Long id,
+                                                      @PathVariable Long itemId,
+                                                      @Valid @RequestBody Transition body) {
+        return ResponseEntity.ok(bookingService.applyTransition(id, itemId, body));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<BookingResponse> cancel(@PathVariable Long id) {
+        return ResponseEntity.ok(bookingService.cancel(id));
     }
 }

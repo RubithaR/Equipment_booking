@@ -53,10 +53,24 @@ public class UserController {
         return ResponseEntity.ok(userService.getByRole(role));
     }
 
-    // Admin-only: list instructors waiting for approval
+    /**
+     * Search active users by free-text (name or email) within a set of roles.
+     * Used by instructors to find a supervisor when delegating a booking.
+     * Example: /api/users/search?q=alice&roles=HOD,LECTURER&limit=20
+     */
+    @GetMapping("/search")
+    public ResponseEntity<List<UserResponse>> search(
+            @RequestParam(required = false) String q,
+            @RequestParam String roles,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(userService.search(q, roles, limit));
+    }
+
+    // Admin-only: list instructors waiting for approval (optionally scoped to a department)
     @GetMapping("/instructors/pending")
-    public ResponseEntity<List<UserResponse>> getPendingInstructors() {
-        return ResponseEntity.ok(userService.getPendingInstructors());
+    public ResponseEntity<List<UserResponse>> getPendingInstructors(
+            @RequestParam(required = false) Long departmentId) {
+        return ResponseEntity.ok(userService.getPendingInstructors(departmentId));
     }
 
     // Admin-only: approve a pending instructor

@@ -23,6 +23,10 @@ public class FeignNotifier implements Notifier {
                     "Instructor account approved",
                     "Your account has been approved by admin. You can now log in.",
                     "ACCOUNT_APPROVED", e);
+            case NotificationEvent.StudentApproved e -> deliver(e.studentId(),
+                    "Student account approved",
+                    "Your account has been approved by your department instructor. You can now log in.",
+                    "ACCOUNT_APPROVED", e);
         }
     }
 

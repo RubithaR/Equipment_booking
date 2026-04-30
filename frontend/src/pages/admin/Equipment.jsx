@@ -67,7 +67,7 @@ export default function AdminEquipment() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>#</th><th>Name</th><th>Category</th><th>Location</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>#</th><th>Name</th><th>Category</th><th>Lab</th><th>Location</th><th>Instructors</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {items.map((e) => (
@@ -75,7 +75,13 @@ export default function AdminEquipment() {
                     <td>{e.id}</td>
                     <td>{e.name}<div style={{ fontSize: 12, color: 'var(--muted)' }}>{e.description}</div></td>
                     <td>{e.category}</td>
+                    <td>{e.labName || '—'}</td>
                     <td>{e.location}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {e.instructorNames && e.instructorNames.length > 0
+                        ? e.instructorNames.join(', ')
+                        : '—'}
+                    </td>
                     <td><Badge value={e.status} /></td>
                     <td style={{ display: 'flex', gap: 8 }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => setEditing(e)}>Edit</button>

@@ -68,8 +68,14 @@ export default function Equipment() {
                   </div>
                   <h3 className="eq-title">{e.name}</h3>
                   <div className="eq-meta">
-                    {(e.location || 'Lab')}{e.description ? ` · ${e.description}` : ''}
+                    {(e.labName || e.location || 'Lab')}{e.description ? ` · ${e.description}` : ''}
                   </div>
+                  {e.instructorNames && e.instructorNames.length > 0 && (
+                    <div className="eq-instructors">
+                      <span className="eq-instructors-label">Instructor{e.instructorNames.length > 1 ? 's' : ''}:</span>{' '}
+                      {e.instructorNames.join(', ')}
+                    </div>
+                  )}
                   <div className="eq-foot">
                     <div>
                       <div className="eq-foot-label">Next slot</div>

@@ -19,4 +19,10 @@ public class EquipmentRequest {
     private String status;
 
     private String description;
+
+    // Required when an instructor creates equipment — must be one of their assigned labs
+    private Long labId;
+
+    // The instructor performing the create — server validates assignment to labId
+    private Long instructorId;
 }

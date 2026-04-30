@@ -102,8 +102,8 @@ export default function Register() {
         setSuccess('Account created. Awaiting admin approval — you will be notified. Redirecting to sign in…');
         setTimeout(() => nav('/login'), 3000);
       } else {
-        setSuccess('Account created. Redirecting to sign in…');
-        setTimeout(() => nav('/login'), 1500);
+        setSuccess('Account created. Awaiting your department instructor\'s approval — you will be notified. Redirecting to sign in…');
+        setTimeout(() => nav('/login'), 3000);
       }
     } catch (err) {
       setError(errMsg(err));
@@ -136,7 +136,7 @@ export default function Register() {
         <div className="field">
           <label>I am registering as</label>
           <select value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="STUDENT">Student</option>
+            <option value="STUDENT">Student (requires instructor approval)</option>
             <option value="INSTRUCTOR">Instructor (requires admin approval)</option>
           </select>
         </div>

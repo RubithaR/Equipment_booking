@@ -6,30 +6,21 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "equipment")
+@Table(name = "lab_instructors", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_lab_instructor", columnNames = {"labId", "instructorId"})
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Equipment {
+public class LabInstructor {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
-    private String name;
-
-    @Column(nullable = false)
-    private String category;
-
-    @Column(nullable = false)
-    private String location;
-
-    @Column(nullable = false)
-    private String status;
-
-    private String description;
-
-    // FK to labs.id — equipment lives in a lab; instructors of that lab manage it
     private Long labId;
+
+    @Column(nullable = false)
+    private Long instructorId;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { equipmentApi, errMsg } from '../../api';
+import { equipmentApi, labApi, errMsg } from '../../api';
+import { getCurrentUser } from '../../auth';
 
 const CATEGORIES = [
   'Electronics',
@@ -17,14 +18,17 @@ const EMPTY = {
   location: '',
   status: 'AVAILABLE',
   description: '',
+  labId: '',
 };
 
 export default function AddEquipment() {
+  const me = getCurrentUser();
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [recent, setRecent] = useState([]);
+  const [myLabs, setMyLabs] = useState([]);
 
   const loadRecent = async () => {
     try {
@@ -36,7 +40,17 @@ export default function AddEquipment() {
     }
   };
 
-  useEffect(() => { loadRecent(); }, []);
+  const loadMyLabs = async () => {
+    if (!me?.id) return;
+    try {
+      const { data } = await labApi.byInstructor(me.id);
+      setMyLabs(data || []);
+    } catch {
+      setMyLabs([]);
+    }
+  };
+
+  useEffect(() => { loadRecent(); loadMyLabs(); }, []);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -44,8 +58,18 @@ export default function AddEquipment() {
     e.preventDefault();
     setError(''); setSuccess(''); setBusy(true);
     try {
-      const { data } = await equipmentApi.create(form);
-      setSuccess(`"${data.name}" added to the catalogue. Students can now book it.`);
+      if (!form.labId) {
+        setError('Please select a lab. You can only add equipment to labs you are assigned to.');
+        setBusy(false);
+        return;
+      }
+      const payload = {
+        ...form,
+        labId: Number(form.labId),
+        instructorId: me.id,
+      };
+      const { data } = await equipmentApi.create(payload);
+      setSuccess(`"${data.name}" added to ${data.labName || 'the catalogue'}. Students can now book it.`);
       setForm(EMPTY);
       loadRecent();
       setTimeout(() => setSuccess(''), 5000);
@@ -100,11 +124,25 @@ export default function AddEquipment() {
                 </select>
               </div>
               <div className="field">
-                <label>Location <span className="req">*</span></label>
-                <input value={form.location} required onChange={set('location')}
-                       placeholder="Lab A-101" />
-                <span className="field-hint">Building + room number.</span>
+                <label>Lab <span className="req">*</span></label>
+                <select value={form.labId} required onChange={set('labId')}>
+                  <option value="">— Select one of your labs —</option>
+                  {myLabs.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  {myLabs.length === 0
+                    ? 'You are not assigned to any labs yet. Ask the admin.'
+                    : 'Only labs you are assigned to are listed.'}
+                </span>
               </div>
+            </div>
+            <div className="field">
+              <label>Location <span className="req">*</span></label>
+              <input value={form.location} required onChange={set('location')}
+                     placeholder="Lab A-101" />
+              <span className="field-hint">Building + room number (free text — different from the Lab record above).</span>
             </div>
           </div>
 

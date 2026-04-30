@@ -71,4 +71,25 @@ public class UserController {
         userService.rejectInstructor(id);
         return ResponseEntity.noContent().build();
     }
+
+    // Instructor-only: list pending students from instructor's own department
+    @GetMapping("/students/pending")
+    public ResponseEntity<List<UserResponse>> getPendingStudents(@RequestParam Long instructorId) {
+        return ResponseEntity.ok(userService.getPendingStudentsForInstructor(instructorId));
+    }
+
+    // Instructor-only: approve a student of the same department
+    @PatchMapping("/{id}/approve-student")
+    public ResponseEntity<UserResponse> approveStudent(@PathVariable Long id,
+                                                       @RequestParam Long instructorId) {
+        return ResponseEntity.ok(userService.approveStudent(id, instructorId));
+    }
+
+    // Instructor-only: reject (delete) a pending student of the same department
+    @DeleteMapping("/{id}/reject-student")
+    public ResponseEntity<Void> rejectStudent(@PathVariable Long id,
+                                              @RequestParam Long instructorId) {
+        userService.rejectStudent(id, instructorId);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -15,11 +15,13 @@ import MyBookings from './pages/student/MyBookings';
 import PendingBookings from './pages/instructor/PendingBookings';
 import AllBookings from './pages/instructor/AllBookings';
 import InstructorAddEquipment from './pages/instructor/AddEquipment';
+import PendingStudents from './pages/instructor/PendingStudents';
 
 import AdminOverview from './pages/admin/AdminOverview';
 import PendingInstructors from './pages/admin/PendingInstructors';
 import Users from './pages/admin/Users';
 import AdminEquipment from './pages/admin/Equipment';
+import AdminLabs from './pages/admin/Labs';
 
 function Shell() {
   return (
@@ -61,6 +63,7 @@ export default function App() {
         <Route element={<ProtectedRoute roles={['INSTRUCTOR']}><Shell /></ProtectedRoute>}>
           <Route path="/instructor" element={<Navigate to="/instructor/pending" replace />} />
           <Route path="/instructor/pending" element={<PendingBookings />} />
+          <Route path="/instructor/students-pending" element={<PendingStudents />} />
           <Route path="/instructor/all" element={<AllBookings />} />
           <Route path="/instructor/equipment/new" element={<InstructorAddEquipment />} />
           <Route path="/instructor/notifications" element={<Notifications />} />
@@ -72,6 +75,7 @@ export default function App() {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/bookings" element={<AllBookings />} />
           <Route path="/admin/equipment" element={<AdminEquipment />} />
+          <Route path="/admin/labs" element={<AdminLabs />} />
           <Route path="/admin/notifications" element={<Notifications />} />
         </Route>
 

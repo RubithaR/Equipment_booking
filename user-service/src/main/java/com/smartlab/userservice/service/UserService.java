@@ -71,7 +71,8 @@ public class UserService {
             user.setIndexNumber(request.getIndexNumber());
             user.setNameWithInitial(request.getNameWithInitial());
             user.setUniEmail(request.getUniEmail());
-            user.setStatus(STATUS_ACTIVE);
+            // Students must now wait for an instructor of their department to approve
+            user.setStatus(STATUS_PENDING);
         } else {
             // Instructor: must wait for admin approval
             user.setStatus(STATUS_PENDING);
@@ -137,6 +138,64 @@ public class UserService {
             throw new BadRequestException("User is not an instructor");
         }
         userRepository.delete(user);
+    }
+
+    // ===== Student approval (by instructor of same department) =====
+
+    public List<UserResponse> getPendingStudentsForInstructor(Long instructorId) {
+        User instructor = userRepository.findById(instructorId)
+                .orElseThrow(() -> new NotFoundException("Instructor not found with id: " + instructorId));
+        if (!ROLE_INSTRUCTOR.equals(instructor.getRole())) {
+            throw new BadRequestException("Only instructors can view pending students");
+        }
+        if (isBlank(instructor.getDepartment())) {
+            throw new BadRequestException("Instructor has no department set");
+        }
+        return userRepository
+                .findByRoleAndStatusAndDepartment(ROLE_STUDENT, STATUS_PENDING, instructor.getDepartment())
+                .stream().map(UserResponse::from).collect(Collectors.toList());
+    }
+
+    public UserResponse approveStudent(Long studentId, Long instructorId) {
+        User instructor = userRepository.findById(instructorId)
+                .orElseThrow(() -> new NotFoundException("Instructor not found with id: " + instructorId));
+        if (!ROLE_INSTRUCTOR.equals(instructor.getRole())) {
+            throw new BadRequestException("Only instructors can approve students");
+        }
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new NotFoundException("Student not found with id: " + studentId));
+        if (!ROLE_STUDENT.equals(student.getRole())) {
+            throw new BadRequestException("User is not a student");
+        }
+        if (instructor.getDepartment() == null
+                || !instructor.getDepartment().equals(student.getDepartment())) {
+            throw new UnauthorizedException("You can only approve students from your department");
+        }
+        if (STATUS_ACTIVE.equals(student.getStatus())) {
+            throw new ConflictException("Student is already active");
+        }
+        student.setStatus(STATUS_ACTIVE);
+        User saved = userRepository.save(student);
+        notifier.publish(new NotificationEvent.StudentApproved(saved.getId()));
+        return UserResponse.from(saved);
+    }
+
+    public void rejectStudent(Long studentId, Long instructorId) {
+        User instructor = userRepository.findById(instructorId)
+                .orElseThrow(() -> new NotFoundException("Instructor not found with id: " + instructorId));
+        if (!ROLE_INSTRUCTOR.equals(instructor.getRole())) {
+            throw new BadRequestException("Only instructors can reject students");
+        }
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new NotFoundException("Student not found with id: " + studentId));
+        if (!ROLE_STUDENT.equals(student.getRole())) {
+            throw new BadRequestException("User is not a student");
+        }
+        if (instructor.getDepartment() == null
+                || !instructor.getDepartment().equals(student.getDepartment())) {
+            throw new UnauthorizedException("You can only reject students from your department");
+        }
+        userRepository.delete(student);
     }
 
     public Map<String, Boolean> checkAvailability(String email, String enNumber, String indexNumber) {

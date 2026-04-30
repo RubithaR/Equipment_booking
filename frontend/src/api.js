@@ -49,6 +49,13 @@ export const userApi = {
   getPendingInstructors: () => api.get('/api/users/instructors/pending'),
   approveInstructor: (id) => api.patch(`/api/users/${id}/approve`),
   rejectInstructor: (id) => api.delete(`/api/users/${id}/reject`),
+  // Instructor approves/rejects a student of the same department
+  getPendingStudents: (instructorId) =>
+    api.get('/api/users/students/pending', { params: { instructorId } }),
+  approveStudent: (studentId, instructorId) =>
+    api.patch(`/api/users/${studentId}/approve-student`, null, { params: { instructorId } }),
+  rejectStudent: (studentId, instructorId) =>
+    api.delete(`/api/users/${studentId}/reject-student`, { params: { instructorId } }),
 };
 
 export const equipmentApi = {
@@ -59,6 +66,18 @@ export const equipmentApi = {
   updateStatus: (id, status) => api.patch(`/api/equipment/${id}/status`, { status }),
   remove: (id) => api.delete(`/api/equipment/${id}`),
   byStatus: (status) => api.get(`/api/equipment/status/${status}`),
+};
+
+export const labApi = {
+  list: () => api.get('/api/labs'),
+  get: (id) => api.get(`/api/labs/${id}`),
+  create: (data) => api.post('/api/labs', data),
+  remove: (id) => api.delete(`/api/labs/${id}`),
+  assignInstructor: (labId, instructorId) =>
+    api.post(`/api/labs/${labId}/instructors/${instructorId}`),
+  unassignInstructor: (labId, instructorId) =>
+    api.delete(`/api/labs/${labId}/instructors/${instructorId}`),
+  byInstructor: (instructorId) => api.get(`/api/labs/by-instructor/${instructorId}`),
 };
 
 export const bookingApi = {

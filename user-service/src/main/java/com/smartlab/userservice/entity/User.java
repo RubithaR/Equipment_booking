@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
+
 @Entity
 @Table(name = "users")
 @Data
@@ -16,34 +18,48 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Login email — gmail or any email allowed
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 200)
     private String email;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 200)
     private String password;
 
-    @Column(nullable = false)
+    @Column(name = "full_name", nullable = false, length = 200)
     private String fullName;
 
-    // STUDENT, INSTRUCTOR, ADMIN
-    @Column(nullable = false)
+    // MAIN_ADMIN, DEPT_ADMIN, HOD, LECTURER, INSTRUCTOR, STUDENT
+    @Column(nullable = false, length = 40)
     private String role;
 
-    private String department;
-
-    // ACTIVE, PENDING (instructor needs admin approval before login)
-    @Column(nullable = false)
+    // ACTIVE, PENDING (instructor accounts wait for dept-admin approval)
+    @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "faculty_id")
+    private Long facultyId;
+
+    @Column(name = "department_id")
+    private Long departmentId;
+
+    @Column(name = "phone_number", length = 20)
     private String phoneNumber;
 
-    // ===== Student-only fields (null for instructor/admin) =====
-    private String enNumber;        // e.g., EN102752
-    private String indexNumber;     // e.g., 21ENG009
-    private String nameWithInitial; // e.g., A. Harishan
-    private String uniEmail;        // e.g., en102752@feo.sjp.ac.lk
+    // ===== Student-only fields (null for staff/admin) =====
+    @Column(name = "en_number", length = 20)
+    private String enNumber;
 
-    // TODO: ID photo — store URL/path here once file upload is implemented
+    @Column(name = "index_number", length = 20)
+    private String indexNumber;
+
+    @Column(name = "name_with_initial", length = 200)
+    private String nameWithInitial;
+
+    @Column(name = "uni_email", length = 200)
+    private String uniEmail;
+
+    @Column(name = "id_photo_url", length = 500)
     private String idPhotoUrl;
+
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
+    private Instant createdAt;
 }

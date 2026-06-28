@@ -1,0 +1,98 @@
+# =============================================================================
+# Smart Lab — local development orchestration
+# Run all 6 backend services with one command:  docker compose up
+# Stop everything:                              docker compose down
+# Rebuild after code changes:                   docker compose up --build
+# Run frontend separately:                      cd frontend && npm run dev
+# =============================================================================
+
+services:
+
+  eureka-server:
+    build: ./eureka-server
+    container_name: smartlab-eureka
+    ports:
+      - "8761:8761"
+    environment:
+      - EUREKA_HOSTNAME=eureka-server
+    networks: [smartlab]
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: smartlab-user
+    ports:
+      - "8081:8081"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:-ThisIsASecretKeyForSmartLabEquipmentBookingSystemMustBeAtLeast32Bytes}
+      # Main admin
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@foe.sjp.ac.lk}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin123}
+      # Department admins (one per department, all optional — leave blank to skip)
+      - DEPT_ADMIN_COMPUTER_EMAIL=${DEPT_ADMIN_COMPUTER_EMAIL:-}
+      - DEPT_ADMIN_COMPUTER_PASSWORD=${DEPT_ADMIN_COMPUTER_PASSWORD:-}
+      - DEPT_ADMIN_ELECTRICAL_EMAIL=${DEPT_ADMIN_ELECTRICAL_EMAIL:-}
+      - DEPT_ADMIN_ELECTRICAL_PASSWORD=${DEPT_ADMIN_ELECTRICAL_PASSWORD:-}
+      - DEPT_ADMIN_MECHANICAL_EMAIL=${DEPT_ADMIN_MECHANICAL_EMAIL:-}
+      - DEPT_ADMIN_MECHANICAL_PASSWORD=${DEPT_ADMIN_MECHANICAL_PASSWORD:-}
+      - DEPT_ADMIN_CIVIL_EMAIL=${DEPT_ADMIN_CIVIL_EMAIL:-}
+      - DEPT_ADMIN_CIVIL_PASSWORD=${DEPT_ADMIN_CIVIL_PASSWORD:-}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  equipment-service:
+    build:
+      context: .
+      dockerfile: equipment-service/Dockerfile
+    container_name: smartlab-equipment
+    ports:
+      - "8082:8082"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  booking-service:
+    build:
+      context: .
+      dockerfile: booking-service/Dockerfile
+    container_name: smartlab-booking
+    ports:
+      - "8083:8083"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: smartlab-notification
+    ports:
+      - "8084:8084"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET:-ThisIsASecretKeyForSmartLabEquipmentBookingSystemMustBeAtLeast32Bytes}
+    depends_on: [eureka-server]
+    networks: [smartlab]
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: smartlab-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+    depends_on: [eureka-server, user-service]
+    networks: [smartlab]
+
+networks:
+  smartlab:
+    driver: bridge

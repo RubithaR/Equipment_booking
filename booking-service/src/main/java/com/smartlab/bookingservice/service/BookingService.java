@@ -1,203 +1,333 @@
 package com.smartlab.bookingservice.service;
 
-import com.smartlab.bookingservice.client.EquipmentClient;
-import com.smartlab.bookingservice.client.NotificationClient;
+import com.smartlab.bookingservice.auth.BookingAuthorizer;
+import com.smartlab.security.Roles;
+import com.smartlab.bookingservice.client.ItemClient;
+import com.smartlab.bookingservice.client.LabClient;
 import com.smartlab.bookingservice.client.UserClient;
-import com.smartlab.bookingservice.dto.BookingRequest;
-import com.smartlab.bookingservice.dto.EquipmentDto;
-import com.smartlab.bookingservice.dto.NotificationDto;
-import com.smartlab.bookingservice.dto.ReviewRequest;
-import com.smartlab.bookingservice.dto.UserDto;
+import com.smartlab.bookingservice.dto.*;
 import com.smartlab.bookingservice.entity.Booking;
-import com.smartlab.bookingservice.exception.BadRequestException;
-import com.smartlab.bookingservice.exception.ConflictException;
-import com.smartlab.bookingservice.exception.NotFoundException;
+import com.smartlab.bookingservice.entity.BookingAttachment;
+import com.smartlab.bookingservice.entity.BookingEvent;
+import com.smartlab.bookingservice.entity.BookingItem;
+import com.smartlab.bookingservice.entity.BookingState;
+import com.smartlab.security.ItemStatus;
+import com.smartlab.security.exception.AuthorizationException;
+import com.smartlab.security.exception.BadRequestException;
+import com.smartlab.security.exception.ConflictException;
+import com.smartlab.security.exception.NotFoundException;
+import com.smartlab.bookingservice.notifier.NotificationEvent;
+import com.smartlab.notificationclient.Notifier;
+import com.smartlab.bookingservice.repository.BookingAttachmentRepository;
+import com.smartlab.bookingservice.repository.BookingEventRepository;
+import com.smartlab.bookingservice.repository.BookingItemRepository;
 import com.smartlab.bookingservice.repository.BookingRepository;
+import com.smartlab.security.CurrentUser;
+import com.smartlab.security.UserContext;
+import com.smartlab.bookingservice.transition.Transition;
+import com.smartlab.bookingservice.transition.TransitionEngine;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+/**
+ * Top-level coordinator for the Booking aggregate. Per-line state transitions
+ * are delegated to {@link TransitionEngine}; this class handles creation,
+ * multi-line orchestrations (cancel, overdue scan), and reads.
+ */
 @Service
 @RequiredArgsConstructor
 public class BookingService {
 
-    public static final String STATUS_PENDING = "PENDING_APPROVAL";
-    public static final String STATUS_CONFIRMED = "CONFIRMED";
-    public static final String STATUS_REJECTED = "REJECTED";
-    public static final String STATUS_CANCELLED = "CANCELLED";
+    private static final Logger log = LoggerFactory.getLogger(BookingService.class);
 
     private final BookingRepository bookingRepository;
+    private final BookingItemRepository itemRepository;
+    private final BookingEventRepository eventRepository;
+    private final BookingAttachmentRepository attachmentRepository;
     private final UserClient userClient;
-    private final EquipmentClient equipmentClient;
-    private final NotificationClient notificationClient;
+    private final ItemClient itemClient;
+    private final LabClient labClient;
+    private final Notifier<NotificationEvent> notifier;
+    private final TransitionEngine engine;
+    private final BookingAuthorizer authorizer;
 
-    public Booking createBooking(BookingRequest request) {
-        if (request.getStartTime() == null || request.getEndTime() == null) {
-            throw new BadRequestException("startTime and endTime are required");
-        }
-        if (!request.getEndTime().isAfter(request.getStartTime())) {
-            throw new BadRequestException("endTime must be after startTime");
-        }
+    // ===== Create =====
 
-        // Verify student exists
-        UserDto student;
-        try {
-            student = userClient.getUserById(request.getUserId());
-        } catch (Exception e) {
-            throw new NotFoundException("User not found with id: " + request.getUserId());
+    @Transactional
+    public BookingResponse create(BookingRequest request) {
+        UserContext me = CurrentUser.require();
+        if (!me.hasRole(Roles.STUDENT)) {
+            throw new AuthorizationException("Only students can submit bookings");
         }
-
-        // Verify equipment exists
-        EquipmentDto equipment;
-        try {
-            equipment = equipmentClient.getEquipmentById(request.getEquipmentId());
-        } catch (Exception e) {
-            throw new NotFoundException("Equipment not found with id: " + request.getEquipmentId());
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new BadRequestException("Booking must contain at least one item");
+        }
+        if (!request.getReturnDate().isAfter(request.getStartDate())) {
+            throw new BadRequestException("returnDate must be after startDate");
         }
 
-        if ("MAINTENANCE".equalsIgnoreCase(equipment.getStatus())
-                || "OUT_OF_SERVICE".equalsIgnoreCase(equipment.getStatus())) {
-            throw new ConflictException("Equipment is not bookable. Current status: " + equipment.getStatus());
-        }
-
-        // Time-overlap check (against PENDING + CONFIRMED — both reserve the slot)
-        List<Booking> conflicts = bookingRepository.findConflicts(
-                request.getEquipmentId(), request.getStartTime(), request.getEndTime());
-        if (!conflicts.isEmpty()) {
-            Booking c = conflicts.get(0);
-            throw new ConflictException(
-                    "Equipment already booked from " + c.getStartTime() + " to " + c.getEndTime()
-                    + " (booking #" + c.getId() + ", status " + c.getStatus() + ")");
-        }
-
-        Booking booking = new Booking();
-        booking.setUserId(request.getUserId());
-        booking.setEquipmentId(request.getEquipmentId());
-        booking.setStartTime(request.getStartTime());
-        booking.setEndTime(request.getEndTime());
-        booking.setPurpose(request.getPurpose());
-        booking.setStatus(STATUS_PENDING);
-        booking.setCreatedAt(LocalDateTime.now());
-        Booking saved = bookingRepository.save(booking);
-
-        // Notify the student that their request was submitted
-        sendNotification(saved.getUserId(),
-                "Booking submitted",
-                "Your booking #" + saved.getId() + " for " + equipment.getName()
-                        + " is awaiting instructor approval.",
-                "BOOKING_SUBMITTED");
-
-        // Notify all instructors that a new booking needs review
-        try {
-            List<UserDto> instructors = userClient.getByRole("INSTRUCTOR");
-            for (UserDto inst : instructors) {
-                sendNotification(inst.getId(),
-                        "New booking awaiting review",
-                        student.getFullName() + " requested " + equipment.getName()
-                                + " from " + saved.getStartTime() + " to " + saved.getEndTime() + ".",
-                        "BOOKING_NEEDS_REVIEW");
+        Set<Long> seen = new HashSet<>();
+        List<ResolvedLine> resolved = new ArrayList<>();
+        for (BookingRequest.Line line : request.getItems()) {
+            if (line.getItemId() == null || line.getLabId() == null) {
+                throw new BadRequestException("Every item line must include itemId and labId");
             }
-        } catch (Exception e) {
-            System.err.println("Warning: failed to notify instructors: " + e.getMessage());
+            if (!seen.add(line.getItemId())) {
+                throw new BadRequestException("Duplicate item in request: #" + line.getItemId());
+            }
+
+            ItemDto item;
+            try { item = itemClient.getItemById(line.getItemId()); }
+            catch (Exception e) { throw new NotFoundException("Item not found: " + line.getItemId()); }
+            if (!item.getLabId().equals(line.getLabId())) {
+                throw new BadRequestException("Item #" + item.getId() + " does not belong to lab #" + line.getLabId());
+            }
+            if (ItemStatus.blocksBooking(item.getStatus())) {
+                throw new ConflictException("Item " + item.getName() + " is not bookable (status "
+                        + item.getStatus() + ")");
+            }
+
+            LabDto lab;
+            try { lab = labClient.getLabById(line.getLabId()); }
+            catch (Exception e) { throw new NotFoundException("Lab not found: " + line.getLabId()); }
+            if (lab.getInstructorUserId() == null) {
+                throw new ConflictException("Lab " + lab.getName() + " has no instructor assigned yet — please pick another item.");
+            }
+
+            List<BookingItem> conflicts = itemRepository.findConflicts(
+                    item.getId(), request.getStartDate(), request.getReturnDate());
+            if (!conflicts.isEmpty()) {
+                BookingItem c = conflicts.get(0);
+                throw new ConflictException(
+                        "Item " + item.getName() + " is already booked in window "
+                                + " (booking #" + c.getBookingId() + ", state " + c.getState() + ")");
+            }
+
+            resolved.add(new ResolvedLine(item, lab));
         }
 
-        return saved;
-    }
+        Booking b = new Booking();
+        b.setStudentUserId(me.userId());
+        b.setStudentDepartmentId(request.getStudentDepartmentId());
+        b.setProjectName(request.getProjectName());
+        b.setPurpose(request.getPurpose());
+        b.setStartDate(request.getStartDate());
+        b.setReturnDate(request.getReturnDate());
+        b.setNominatedSupervisorUserId(request.getNominatedSupervisorUserId());
+        b.setState(BookingState.SUBMITTED);
+        Booking savedBooking = bookingRepository.save(b);
 
-    public Booking approve(Long bookingId, ReviewRequest review) {
-        Booking booking = getById(bookingId);
-        if (!STATUS_PENDING.equals(booking.getStatus())) {
-            throw new ConflictException("Only PENDING_APPROVAL bookings can be approved. Current: " + booking.getStatus());
+        List<BookingItem> savedLines = new ArrayList<>();
+        for (ResolvedLine r : resolved) {
+            BookingItem bi = new BookingItem();
+            bi.setBookingId(savedBooking.getId());
+            bi.setItemId(r.item.getId());
+            bi.setLabId(r.lab.getId());
+            bi.setInstructorUserId(r.lab.getInstructorUserId());
+            bi.setState(BookingState.SUBMITTED);
+            bi.setLastActorUserId(me.userId());
+            BookingItem saved = itemRepository.save(bi);
+            savedLines.add(saved);
+            BookingEvent ev = new BookingEvent();
+            ev.setBookingId(savedBooking.getId());
+            ev.setBookingItemId(saved.getId());
+            ev.setActorUserId(me.userId());
+            ev.setToState(BookingState.SUBMITTED);
+            eventRepository.save(ev);
         }
-        booking.setStatus(STATUS_CONFIRMED);
-        booking.setReviewedByInstructorId(review.getInstructorId());
-        booking.setReviewedAt(LocalDateTime.now());
-        booking.setReviewNote(review.getNote());
-        Booking saved = bookingRepository.save(booking);
+        BookingEvent umbrellaEv = new BookingEvent();
+        umbrellaEv.setBookingId(savedBooking.getId());
+        umbrellaEv.setActorUserId(me.userId());
+        umbrellaEv.setToState(BookingState.SUBMITTED);
+        umbrellaEv.setNote("Submitted with " + savedLines.size() + " item(s)");
+        eventRepository.save(umbrellaEv);
 
-        // Mark equipment IN_USE only when approved
-        try {
-            equipmentClient.updateStatus(booking.getEquipmentId(), Map.of("status", "IN_USE"));
-        } catch (Exception e) {
-            System.err.println("Warning: failed to update equipment status: " + e.getMessage());
+        if (request.getAttachments() != null) {
+            for (BookingRequest.AttachmentInput in : request.getAttachments()) {
+                BookingAttachment a = new BookingAttachment();
+                a.setBookingId(savedBooking.getId());
+                a.setFileUrl(in.getFileUrl());
+                a.setFileName(in.getFileName());
+                a.setKind(in.getKind() == null ? "OTHER" : in.getKind());
+                a.setUploadedByUserId(me.userId());
+                attachmentRepository.save(a);
+            }
         }
 
-        sendNotification(booking.getUserId(),
-                "Booking approved",
-                "Your booking #" + booking.getId() + " has been approved by instructor.",
-                "BOOKING_APPROVED");
-        return saved;
-    }
+        UserDto student = safeGetUser(me.userId());
+        Set<Long> labIds = resolved.stream().map(r -> r.lab.getId()).collect(Collectors.toSet());
+        notifier.publish(new NotificationEvent.SubmittedAckToStudent(
+                savedBooking.getId(), me.userId(), savedLines.size(), labIds.size()));
 
-    public Booking reject(Long bookingId, ReviewRequest review) {
-        Booking booking = getById(bookingId);
-        if (!STATUS_PENDING.equals(booking.getStatus())) {
-            throw new ConflictException("Only PENDING_APPROVAL bookings can be rejected. Current: " + booking.getStatus());
+        Map<Long, List<ResolvedLine>> byInstructor = resolved.stream()
+                .collect(Collectors.groupingBy(r -> r.lab.getInstructorUserId(), LinkedHashMap::new, Collectors.toList()));
+        for (var entry : byInstructor.entrySet()) {
+            Long instructorId = entry.getKey();
+            List<ResolvedLine> lines = entry.getValue();
+            String labName = lines.get(0).lab.getName();
+            List<String> itemNames = lines.stream().map(r -> r.item.getName()).collect(Collectors.toList());
+            notifier.publish(new NotificationEvent.SubmittedDigestToInstructor(
+                    savedBooking.getId(), instructorId,
+                    student != null ? student.getFullName() : "A student",
+                    labName, savedBooking.getProjectName(), itemNames,
+                    savedBooking.getStartDate(), savedBooking.getReturnDate()));
         }
-        booking.setStatus(STATUS_REJECTED);
-        booking.setReviewedByInstructorId(review.getInstructorId());
-        booking.setReviewedAt(LocalDateTime.now());
-        booking.setReviewNote(review.getNote());
-        Booking saved = bookingRepository.save(booking);
 
-        sendNotification(booking.getUserId(),
-                "Booking rejected",
-                "Your booking #" + booking.getId() + " was rejected by instructor."
-                        + (review.getNote() != null ? " Reason: " + review.getNote() : ""),
-                "BOOKING_REJECTED");
-        return saved;
+        return BookingResponse.from(savedBooking, savedLines);
     }
 
-    public List<Booking> getAll() {
-        return bookingRepository.findAll();
+    // ===== Per-line transitions (umbrella endpoint) =====
+
+    @Transactional
+    public BookingResponse applyTransition(Long bookingId, Long lineId, Transition transition) {
+        UserContext me = CurrentUser.require();
+        engine.apply(bookingId, lineId, transition, me);
+        return loadResponse(bookingId);
     }
 
-    public Booking getById(Long id) {
+    // ===== Booking-level student action =====
+
+    @Transactional
+    public BookingResponse cancel(Long bookingId) {
+        UserContext me = CurrentUser.require();
+        Booking booking = getOrThrow(bookingId);
+        authorizer.requireCanCancel(me, booking);
+        List<BookingItem> lines = itemRepository.findByBookingIdOrderByIdAsc(bookingId);
+        Set<Long> notifyTargets = new java.util.LinkedHashSet<>();
+        Transition.Cancel cancel = new Transition.Cancel();
+        int cancelled = 0;
+        for (BookingItem line : lines) {
+            if (!BookingState.isCancellable(line.getState())) continue;
+            engine.apply(line, cancel, me);
+            notifyTargets.add(line.getInstructorUserId());
+            cancelled++;
+        }
+        if (cancelled == 0) {
+            throw new ConflictException("Nothing left to cancel — every line is already collected or terminal.");
+        }
+        for (Long instructorId : notifyTargets) {
+            notifier.publish(new NotificationEvent.BookingCancelled(bookingId, instructorId, cancelled));
+        }
+        return loadResponse(bookingId);
+    }
+
+    // ===== Cron entry point =====
+
+    @Transactional
+    public int scanOverdue() {
+        LocalDateTime now = LocalDateTime.now();
+        List<BookingItem> due = itemRepository.findCollectedPastDue(now);
+        if (due.isEmpty()) return 0;
+        Transition.FlipOverdue flip = new Transition.FlipOverdue();
+        for (BookingItem line : due) {
+            engine.apply(line, flip, null);
+        }
+        log.info("scanOverdue.flipped count={}", due.size());
+        return due.size();
+    }
+
+    // ===== Reads =====
+
+    public BookingResponse getById(Long id) {
+        Booking b = getOrThrow(id);
+        List<BookingItem> items = itemRepository.findByBookingIdOrderByIdAsc(id);
+        authorizer.requireCanRead(CurrentUser.require(), b, items);
+        return BookingResponse.from(b, items);
+    }
+
+    public List<BookingResponse> listForCurrentStudent() {
+        UserContext me = CurrentUser.require();
+        return hydrate(bookingRepository.findByStudentUserIdOrderByCreatedAtDesc(me.userId()));
+    }
+
+    public List<BookingResponse> listForCurrentInstructor() {
+        UserContext me = CurrentUser.require();
+        if (!me.hasRole(Roles.INSTRUCTOR)) {
+            throw new AuthorizationException("Only instructors can view this list");
+        }
+        List<BookingItem> myLines = itemRepository.findByInstructorUserIdOrderByCreatedAtDesc(me.userId());
+        Set<Long> bookingIds = myLines.stream().map(BookingItem::getBookingId).collect(Collectors.toSet());
+        return hydrate(bookingRepository.findAllById(bookingIds));
+    }
+
+    public List<BookingResponse> listForCurrentSupervisor() {
+        UserContext me = CurrentUser.require();
+        if (!me.hasAnyRole(Roles.HOD, Roles.LECTURER)) {
+            throw new AuthorizationException("Only HoDs and Lecturers can view this list");
+        }
+        List<BookingItem> myLines = itemRepository.findByAssignedSupervisorUserIdOrderByCreatedAtDesc(me.userId());
+        Set<Long> bookingIds = myLines.stream().map(BookingItem::getBookingId).collect(Collectors.toSet());
+        return hydrate(bookingRepository.findAllById(bookingIds));
+    }
+
+    public List<BookingResponse> listAll(String state) {
+        UserContext me = CurrentUser.require();
+        authorizer.requireAdminListAccess(me);
+        Long deptId = authorizer.listScopeDepartmentId(me).orElse(null);
+        List<Booking> rows;
+        if (state == null && deptId == null)         rows = bookingRepository.findAll();
+        else if (state == null)                      rows = bookingRepository.findByStudentDepartmentIdOrderByCreatedAtDesc(deptId);
+        else if (deptId == null)                     rows = bookingRepository.findByStateOrderByCreatedAtDesc(state);
+        else                                         rows = bookingRepository.findByStudentDepartmentIdAndStateOrderByCreatedAtDesc(deptId, state);
+        return hydrate(rows);
+    }
+
+    public List<EventResponse> timeline(Long bookingId) {
+        Booking b = getOrThrow(bookingId);
+        List<BookingItem> items = itemRepository.findByBookingIdOrderByIdAsc(bookingId);
+        authorizer.requireCanRead(CurrentUser.require(), b, items);
+        return eventRepository.findByBookingIdOrderByCreatedAtAsc(bookingId).stream()
+                .map(EventResponse::from).collect(Collectors.toList());
+    }
+
+    public List<AttachmentResponse> attachments(Long bookingId) {
+        Booking b = getOrThrow(bookingId);
+        List<BookingItem> items = itemRepository.findByBookingIdOrderByIdAsc(bookingId);
+        authorizer.requireCanRead(CurrentUser.require(), b, items);
+        return attachmentRepository.findByBookingIdOrderByCreatedAtAsc(bookingId).stream()
+                .map(AttachmentResponse::from).collect(Collectors.toList());
+    }
+
+    // ===== helpers =====
+
+    private List<BookingResponse> hydrate(List<Booking> bookings) {
+        if (bookings.isEmpty()) return List.of();
+        List<Long> ids = bookings.stream().map(Booking::getId).toList();
+        Map<Long, List<BookingItem>> byBooking = itemRepository
+                .findByBookingIdInOrderByBookingIdAscIdAsc(ids).stream()
+                .collect(Collectors.groupingBy(BookingItem::getBookingId));
+        return bookings.stream()
+                .map(b -> BookingResponse.from(b, byBooking.getOrDefault(b.getId(), List.of())))
+                .toList();
+    }
+
+    private BookingResponse loadResponse(Long bookingId) {
+        Booking b = getOrThrow(bookingId);
+        List<BookingItem> items = itemRepository.findByBookingIdOrderByIdAsc(bookingId);
+        return BookingResponse.from(b, items);
+    }
+
+    private Booking getOrThrow(Long id) {
         return bookingRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Booking not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Booking not found: " + id));
     }
 
-    public List<Booking> getByUserId(Long userId) {
-        return bookingRepository.findByUserId(userId);
+    private UserDto safeGetUser(Long id) {
+        try { return userClient.getUserById(id); }
+        catch (Exception ex) { log.warn("user lookup failed id={}", id, ex); return null; }
     }
 
-    public List<Booking> getByStatus(String status) {
-        return bookingRepository.findByStatusOrderByCreatedAtDesc(status.toUpperCase());
-    }
-
-    public Booking cancelBooking(Long id) {
-        Booking booking = getById(id);
-        if (STATUS_CANCELLED.equals(booking.getStatus()) || STATUS_REJECTED.equals(booking.getStatus())) {
-            throw new ConflictException("Booking is already " + booking.getStatus());
-        }
-        boolean wasConfirmed = STATUS_CONFIRMED.equals(booking.getStatus());
-        booking.setStatus(STATUS_CANCELLED);
-        Booking updated = bookingRepository.save(booking);
-
-        // Only release equipment if it was actually marked IN_USE (i.e. previously CONFIRMED)
-        if (wasConfirmed) {
-            try {
-                equipmentClient.updateStatus(booking.getEquipmentId(), Map.of("status", "AVAILABLE"));
-            } catch (Exception e) {
-                System.err.println("Warning: failed to release equipment: " + e.getMessage());
-            }
-        }
-
-        sendNotification(booking.getUserId(),
-                "Booking cancelled",
-                "Your booking #" + booking.getId() + " has been cancelled.",
-                "BOOKING_CANCELLED");
-        return updated;
-    }
-
-    private void sendNotification(Long userId, String title, String message, String type) {
-        try {
-            notificationClient.send(new NotificationDto(userId, title, message, type));
-        } catch (Exception e) {
-            System.err.println("Warning: failed to send notification: " + e.getMessage());
-        }
-    }
+    private record ResolvedLine(ItemDto item, LabDto lab) {}
 }

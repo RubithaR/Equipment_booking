@@ -1,10 +1,14 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { getCurrentUser, logout } from '../auth';
+import { getCurrentUser, isAdmin, logout } from '../auth';
+import { cartSize, subscribeCart } from '../cart';
 import uniLogo from '../assets/Uni_logo.png';
 
 export default function NavBar() {
   const nav = useNavigate();
   const user = getCurrentUser();
+  const [cartCount, setCartCount] = useState(cartSize());
+  useEffect(() => subscribeCart((items) => setCartCount(items.length)), []);
   if (!user) return null;
 
   const doLogout = () => {
@@ -13,9 +17,14 @@ export default function NavBar() {
   };
 
   const role = user.role;
+  const admin = isAdmin(user);
   const roleLabel = role === 'STUDENT' ? 'Student'
     : role === 'INSTRUCTOR' ? 'Instructor'
-      : 'Administrator';
+    : role === 'MAIN_ADMIN' ? 'Main Administrator'
+    : role === 'DEPT_ADMIN' ? 'Department Administrator'
+    : role === 'HOD' ? 'Head of Department'
+    : role === 'LECTURER' ? 'Lecturer'
+    : 'User';
   const initials = (user.fullName || user.email || '?')
     .split(/\s+/).filter(Boolean).slice(0, 2)
     .map(s => s[0].toUpperCase()).join('') || '?';
@@ -37,6 +46,9 @@ export default function NavBar() {
           {role === 'STUDENT' && (
             <>
               <NavLink to="/student/equipment">Equipment</NavLink>
+              <NavLink to="/student/cart">
+                Cart{cartCount > 0 ? ` (${cartCount})` : ''}
+              </NavLink>
               <NavLink to="/student/bookings">My Bookings</NavLink>
               <NavLink to="/student/notifications">Notifications</NavLink>
             </>
@@ -49,13 +61,21 @@ export default function NavBar() {
               <NavLink to="/instructor/notifications">Notifications</NavLink>
             </>
           )}
-          {role === 'ADMIN' && (
+          {(role === 'HOD' || role === 'LECTURER') && (
+            <>
+              <NavLink to="/supervisor/queue">Queue</NavLink>
+              <NavLink to="/supervisor/notifications">Notifications</NavLink>
+            </>
+          )}
+          {admin && (
             <>
               <NavLink to="/admin">Overview</NavLink>
               <NavLink to="/admin/instructors-pending">Pending Instructors</NavLink>
               <NavLink to="/admin/users">Users</NavLink>
+              <NavLink to="/admin/departments">Departments</NavLink>
+              <NavLink to="/admin/labs">Labs</NavLink>
               <NavLink to="/admin/bookings">Bookings</NavLink>
-              <NavLink to="/admin/equipment">Equipment</NavLink>
+              <NavLink to="/admin/equipment">Items</NavLink>
             </>
           )}
         </div>

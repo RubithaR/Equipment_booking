@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { userApi, equipmentApi, bookingApi, errMsg } from '../../api';
+import { userApi, itemApi, labApi, bookingApi, errMsg } from '../../api';
 
 export default function AdminOverview() {
   const [stats, setStats] = useState(null);
@@ -10,21 +10,28 @@ export default function AdminOverview() {
   useEffect(() => {
     (async () => {
       try {
-        const [students, instructors, pending, equipment, bookings] = await Promise.all([
+        const [students, instructors, pending, items, labs, bookings] = await Promise.all([
           userApi.getByRole('STUDENT'),
           userApi.getByRole('INSTRUCTOR'),
           userApi.getPendingInstructors(),
-          equipmentApi.list(),
+          itemApi.list(),
+          labApi.list(),
           bookingApi.list(),
+        ]);
+        const ACTIVE = new Set([
+          'SUBMITTED', 'INSTRUCTOR_REVIEWING', 'AWAITING_SUPERVISOR',
+          'SUPERVISOR_APPROVED', 'READY_FOR_COLLECTION', 'COLLECTED',
         ]);
         setStats({
           students: students.data.length,
           instructors: instructors.data.filter((i) => i.status === 'ACTIVE').length,
           pendingInstructors: pending.data.length,
-          equipment: equipment.data.length,
+          labs: labs.data.length,
+          items: items.data.length,
           bookings: bookings.data.length,
-          pendingBookings: bookings.data.filter((b) => b.status === 'PENDING_APPROVAL').length,
-          confirmedBookings: bookings.data.filter((b) => b.status === 'CONFIRMED').length,
+          pendingBookings: bookings.data.filter((b) =>
+            b.state === 'SUBMITTED' || b.state === 'INSTRUCTOR_REVIEWING').length,
+          activeBookings: bookings.data.filter((b) => ACTIVE.has(b.state)).length,
         });
       } catch (err) {
         setError(errMsg(err));
@@ -46,18 +53,20 @@ export default function AdminOverview() {
             <Stat label="Students" val={stats.students} />
             <Stat label="Active instructors" val={stats.instructors} />
             <Stat label="Pending instructors" val={stats.pendingInstructors} accent={stats.pendingInstructors > 0} />
-            <Stat label="Equipment" val={stats.equipment} />
+            <Stat label="Labs" val={stats.labs} />
+            <Stat label="Items" val={stats.items} />
             <Stat label="Total bookings" val={stats.bookings} />
-            <Stat label="Pending bookings" val={stats.pendingBookings} />
-            <Stat label="Confirmed bookings" val={stats.confirmedBookings} />
+            <Stat label="Awaiting review" val={stats.pendingBookings} accent={stats.pendingBookings > 0} />
+            <Stat label="Active bookings" val={stats.activeBookings} />
           </div>
 
           <div className="card">
             <h3 style={{ marginTop: 0 }}>Quick links</h3>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <Link to="/admin/instructors-pending" className="btn">Review pending instructors</Link>
+              <Link to="/admin/labs" className="btn btn-secondary">Manage labs</Link>
+              <Link to="/admin/equipment" className="btn btn-secondary">View items</Link>
               <Link to="/admin/users" className="btn btn-secondary">Manage users</Link>
-              <Link to="/admin/equipment" className="btn btn-secondary">Manage equipment</Link>
               <Link to="/admin/bookings" className="btn btn-secondary">View all bookings</Link>
             </div>
           </div>

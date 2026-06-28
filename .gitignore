@@ -39,10 +39,15 @@ Thumbs.db
 *.swp
 *.swo
 
+# ===== Secrets (never commit) =====
+.env
+.env.local
+.env.*.local
+
 # ===== Project-specific (don't push) =====
 note.txt
 *.pdf
 skills-lock.json
-.claude/
+.claude/settings
 .agents
 .metadata

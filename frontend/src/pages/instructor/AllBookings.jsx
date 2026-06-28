@@ -1,57 +1,62 @@
-import { useEffect, useState } from 'react';
-import { bookingApi, equipmentApi, userApi, errMsg } from '../../api';
+import { useState } from 'react';
+import { bookingApi, userApi, errMsg } from '../../api';
+import { isAdmin } from '../../auth';
 import Badge from '../../components/Badge';
+import { fmt } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
+
+const STATES = [
+  'ALL',
+  'SUBMITTED', 'INSTRUCTOR_REVIEWING',
+  'AWAITING_SUPERVISOR', 'SUPERVISOR_APPROVED', 'SUPERVISOR_DECLINED',
+  'READY_FOR_COLLECTION', 'COLLECTED', 'RETURNED', 'OVERDUE',
+  'INSTRUCTOR_REJECTED', 'CANCELLED', 'COMPLETED',
+];
 
 export default function AllBookings() {
-  const [items, setItems] = useState([]);
-  const [equipMap, setEquipMap] = useState({});
+  const admin = isAdmin();
+
+  const [bookings, setBookings] = useState([]);
   const [studentMap, setStudentMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('ALL');
 
-  const load = async () => {
-    setLoading(true);
+  useAsyncEffect(async (isCancelled) => {
     try {
-      const { data: bks } = await bookingApi.list();
-      setItems(bks);
+      const { data: bks } = admin
+        ? await bookingApi.list()
+        : await bookingApi.assignedToMe();
+      if (isCancelled()) return;
+      setBookings(bks);
 
-      const { data: equips } = await equipmentApi.list();
-      const em = {}; equips.forEach((e) => { em[e.id] = e; });
-      setEquipMap(em);
-
-      const userIds = [...new Set(bks.map((b) => b.userId))];
+      const studentIds = [...new Set(bks.map((b) => b.studentUserId))];
       const sm = {};
-      await Promise.all(userIds.map(async (id) => {
+      await Promise.all(studentIds.map(async (id) => {
         try { const { data } = await userApi.getById(id); sm[id] = data; } catch {}
       }));
-      setStudentMap(sm);
+      if (!isCancelled()) setStudentMap(sm);
     } catch (err) {
-      setError(errMsg(err));
+      if (!isCancelled()) setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled()) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
-
-  const visible = items.filter((b) => filter === 'ALL' || b.status === filter)
-                       .sort((a, b) => b.id - a.id);
+  const visible = bookings
+    .filter((b) => filter === 'ALL' || b.state === filter)
+    .sort((a, b) => b.id - a.id);
 
   return (
     <div className="container">
       <h1 className="page-title">All Bookings</h1>
-      <p className="page-sub">Full booking history across all students.</p>
+      <p className="page-sub">{admin ? 'Booking history scoped to your view.' : 'Bookings touching your labs.'}</p>
 
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="filter-bar">
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="ALL">All statuses</option>
-          <option value="PENDING_APPROVAL">Pending</option>
-          <option value="CONFIRMED">Confirmed</option>
-          <option value="REJECTED">Rejected</option>
-          <option value="CANCELLED">Cancelled</option>
+          {STATES.map((s) => <option key={s} value={s}>{s === 'ALL' ? 'All states' : s}</option>)}
         </select>
       </div>
 
@@ -63,21 +68,31 @@ export default function AllBookings() {
             <table>
               <thead>
                 <tr>
-                  <th>#</th><th>Student</th><th>Equipment</th><th>Start</th><th>End</th><th>Status</th><th>Purpose</th>
+                  <th>#</th><th>Student</th><th>Project</th>
+                  <th>Items</th><th>Window</th><th>State</th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((b) => (
-                  <tr key={b.id}>
-                    <td>{b.id}</td>
-                    <td>{studentMap[b.userId]?.fullName || `#${b.userId}`}</td>
-                    <td>{equipMap[b.equipmentId]?.name || `#${b.equipmentId}`}</td>
-                    <td>{fmt(b.startTime)}</td>
-                    <td>{fmt(b.endTime)}</td>
-                    <td><Badge value={b.status} /></td>
-                    <td>{b.purpose || '—'}</td>
-                  </tr>
-                ))}
+                {visible.map((b) => {
+                  const itemSummary = (b.items || []).map((it) => it.state).reduce((acc, s) => {
+                    acc[s] = (acc[s] || 0) + 1; return acc;
+                  }, {});
+                  return (
+                    <tr key={b.id}>
+                      <td>{b.id}</td>
+                      <td>{studentMap[b.studentUserId]?.fullName || `#${b.studentUserId}`}</td>
+                      <td>{b.projectName}</td>
+                      <td>
+                        <div>{(b.items || []).length} item{(b.items || []).length === 1 ? '' : 's'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                          {Object.entries(itemSummary).map(([s, n]) => `${n}× ${s}`).join(', ')}
+                        </div>
+                      </td>
+                      <td>{fmt(b.startDate)}<br /><small>→ {fmt(b.returnDate)}</small></td>
+                      <td><Badge value={b.state} /></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -87,4 +102,3 @@ export default function AllBookings() {
   );
 }
 
-function fmt(dt) { return new Date(dt).toLocaleString(); }

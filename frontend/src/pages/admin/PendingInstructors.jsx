@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { userApi, errMsg } from '../../api';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 export default function PendingInstructors() {
   const [items, setItems] = useState([]);
@@ -7,19 +8,21 @@ export default function PendingInstructors() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
       const { data } = await userApi.getPendingInstructors();
+      if (isCancelled?.()) return;
       setItems(data);
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useAsyncEffect(load, []);
 
   const approve = async (id, name) => {
     try {

@@ -10,6 +10,8 @@ export function setSession(authResponse) {
     email: authResponse.email,
     fullName: authResponse.fullName,
     role: authResponse.role,
+    facultyId: authResponse.facultyId ?? null,
+    departmentId: authResponse.departmentId ?? null,
   }));
 }
 
@@ -31,13 +33,18 @@ export function hasRole(role) {
   return u && u.role === role;
 }
 
+export function isAdmin(user = getCurrentUser()) {
+  return user?.role === 'MAIN_ADMIN' || user?.role === 'DEPT_ADMIN';
+}
+
 export function logout() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 }
 
 export function homePathFor(role) {
-  if (role === 'ADMIN') return '/admin';
+  if (role === 'MAIN_ADMIN' || role === 'DEPT_ADMIN') return '/admin';
   if (role === 'INSTRUCTOR') return '/instructor';
+  if (role === 'HOD' || role === 'LECTURER') return '/supervisor';
   return '/student';
 }

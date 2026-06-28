@@ -1,15 +1,23 @@
 package com.smartlab.userservice.service;
 
-import com.smartlab.userservice.client.NotificationClient;
 import com.smartlab.userservice.dto.AuthResponse;
 import com.smartlab.userservice.dto.UserRequest;
 import com.smartlab.userservice.dto.UserResponse;
+import com.smartlab.userservice.entity.Department;
+import com.smartlab.security.Roles;
 import com.smartlab.userservice.entity.User;
-import com.smartlab.userservice.exception.BadRequestException;
-import com.smartlab.userservice.exception.ConflictException;
-import com.smartlab.userservice.exception.NotFoundException;
-import com.smartlab.userservice.exception.UnauthorizedException;
+import com.smartlab.security.exception.AuthenticationException;
+import com.smartlab.security.exception.AuthorizationException;
+import com.smartlab.security.exception.BadRequestException;
+import com.smartlab.security.exception.ConflictException;
+import com.smartlab.security.exception.NotFoundException;
+import com.smartlab.notificationclient.Notifier;
+import com.smartlab.userservice.notifier.NotificationEvent;
+import com.smartlab.userservice.repository.DepartmentRepository;
+import com.smartlab.userservice.repository.FacultyRepository;
 import com.smartlab.userservice.repository.UserRepository;
+import com.smartlab.security.CurrentUser;
+import com.smartlab.security.UserContext;
 import com.smartlab.userservice.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,61 +26,90 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
-    public static final String ROLE_STUDENT = "STUDENT";
-    public static final String ROLE_INSTRUCTOR = "INSTRUCTOR";
-    public static final String ROLE_ADMIN = "ADMIN";
-
-    public static final String STATUS_ACTIVE = "ACTIVE";
+    public static final String STATUS_ACTIVE  = "ACTIVE";
     public static final String STATUS_PENDING = "PENDING";
 
+    // Students must use a Faculty of Engineering email: en + 6 digits @foe.sjp.ac.lk
+    private static final Pattern STUDENT_EMAIL = Pattern.compile("^en\\d{6}@foe\\.sjp\\.ac\\.lk$");
+    private static final Pattern EN_NUMBER     = Pattern.compile("^EN\\d{6}$");
+
     private final UserRepository userRepository;
+    private final FacultyRepository facultyRepository;
+    private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    private final NotificationClient notificationClient;
+    private final Notifier<NotificationEvent> notifier;
 
     public UserResponse register(UserRequest request) {
         String role = request.getRole() == null ? "" : request.getRole().toUpperCase();
-        if (!role.equals(ROLE_STUDENT) && !role.equals(ROLE_INSTRUCTOR)) {
-            throw new BadRequestException("Role must be STUDENT or INSTRUCTOR (admin is preset).");
+        if (!Roles.SELF_REGISTERABLE.contains(role)) {
+            throw new BadRequestException("Role must be STUDENT or INSTRUCTOR (other roles are created by admins).");
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String email = lower(request.getEmail());
+        if (userRepository.existsByEmail(email)) {
             throw new ConflictException("Email already registered");
+        }
+        if (request.getDepartmentId() == null) {
+            throw new BadRequestException("Department is required");
+        }
+        Department dept = departmentRepository.findById(request.getDepartmentId())
+                .orElseThrow(() -> new BadRequestException("Unknown department: " + request.getDepartmentId()));
+
+        // If facultyId is provided, it must match the department's faculty.
+        Long facultyId = request.getFacultyId() != null ? request.getFacultyId() : dept.getFacultyId();
+        if (!facultyId.equals(dept.getFacultyId())) {
+            throw new BadRequestException("Department does not belong to the given faculty");
+        }
+        if (!facultyRepository.existsById(facultyId)) {
+            throw new BadRequestException("Unknown faculty: " + facultyId);
         }
 
         User user = new User();
-        user.setEmail(request.getEmail());
+        user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setFullName(request.getFullName());
         user.setRole(role);
-        user.setDepartment(request.getDepartment());
+        user.setFacultyId(facultyId);
+        user.setDepartmentId(dept.getId());
         user.setPhoneNumber(request.getPhoneNumber());
 
-        if (role.equals(ROLE_STUDENT)) {
-            // Students: collect extra academic info, instantly active
-            if (isBlank(request.getEnNumber()) || isBlank(request.getIndexNumber())
-                    || isBlank(request.getNameWithInitial()) || isBlank(request.getUniEmail())) {
+        if (Roles.STUDENT.equals(role)) {
+            // Students: enforce EN email format and academic identifiers
+            if (!STUDENT_EMAIL.matcher(email).matches()) {
                 throw new BadRequestException(
-                        "Student registration requires: enNumber, indexNumber, nameWithInitial, uniEmail");
+                        "Student email must be in the format en<6-digits>@foe.sjp.ac.lk (e.g. en102020@foe.sjp.ac.lk).");
             }
-            if (userRepository.existsByEnNumber(request.getEnNumber())) {
+            if (isBlank(request.getEnNumber()) || isBlank(request.getIndexNumber())
+                    || isBlank(request.getNameWithInitial())) {
+                throw new BadRequestException(
+                        "Student registration requires: enNumber, indexNumber, nameWithInitial");
+            }
+            String enNumber = request.getEnNumber().toUpperCase();
+            if (!EN_NUMBER.matcher(enNumber).matches()) {
+                throw new BadRequestException("EN number must be EN followed by 6 digits (e.g. EN102020).");
+            }
+            if (userRepository.existsByEnNumber(enNumber)) {
                 throw new ConflictException("EN number already registered");
             }
             if (userRepository.existsByIndexNumber(request.getIndexNumber())) {
                 throw new ConflictException("Index number already registered");
             }
-            user.setEnNumber(request.getEnNumber());
+            // uniEmail: keep alongside the login email; default to the same value if not provided.
+            String uniEmail = isBlank(request.getUniEmail()) ? email : lower(request.getUniEmail());
+            user.setEnNumber(enNumber);
             user.setIndexNumber(request.getIndexNumber());
             user.setNameWithInitial(request.getNameWithInitial());
-            user.setUniEmail(request.getUniEmail());
+            user.setUniEmail(uniEmail);
             user.setStatus(STATUS_ACTIVE);
         } else {
-            // Instructor: must wait for admin approval
+            // Instructor self-registration: must wait for department admin approval
             user.setStatus(STATUS_PENDING);
         }
 
@@ -81,17 +118,19 @@ public class UserService {
     }
 
     public AuthResponse login(String email, String password) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmail(lower(email))
                 .orElseThrow(() -> new NotFoundException("User not found: " + email));
         if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new UnauthorizedException("Invalid password");
+            throw new AuthenticationException("Invalid password");
         }
         if (STATUS_PENDING.equals(user.getStatus())) {
-            throw new UnauthorizedException(
-                    "Your instructor account is awaiting admin approval. You will be notified once approved.");
+            throw new AuthenticationException(
+                    "Your account is awaiting admin approval. You will be notified once approved.");
         }
-        String token = jwtUtil.generateToken(user.getEmail(), user.getRole(), user.getId());
-        return new AuthResponse(token, user.getId(), user.getEmail(), user.getFullName(), user.getRole());
+        String token = jwtUtil.generateToken(
+                user.getEmail(), user.getRole(), user.getId(), user.getFacultyId(), user.getDepartmentId());
+        return new AuthResponse(token, user.getId(), user.getEmail(), user.getFullName(),
+                user.getRole(), user.getFacultyId(), user.getDepartmentId());
     }
 
     public UserResponse getById(Long id) {
@@ -100,61 +139,99 @@ public class UserService {
     }
 
     public List<UserResponse> getAll() {
-        return userRepository.findAll().stream().map(UserResponse::from).collect(Collectors.toList());
+        Long deptScope = deptScopeForCaller();
+        List<User> rows = (deptScope == null)
+                ? userRepository.findAll()
+                : userRepository.findByDepartmentId(deptScope);
+        return rows.stream().map(UserResponse::from).collect(Collectors.toList());
     }
 
     public List<UserResponse> getByRole(String role) {
-        return userRepository.findByRole(role.toUpperCase()).stream()
+        Long deptScope = deptScopeForCaller();
+        String r = role.toUpperCase();
+        List<User> rows = (deptScope == null)
+                ? userRepository.findByRole(r)
+                : userRepository.findByRoleAndDepartmentId(r, deptScope);
+        return rows.stream().map(UserResponse::from).collect(Collectors.toList());
+    }
+
+    /** When the caller is a DEPT_ADMIN, return their departmentId so admin lists scope to it. */
+    private Long deptScopeForCaller() {
+        UserContext me = CurrentUser.get();
+        return (me != null && me.hasRole(Roles.DEPT_ADMIN)) ? me.departmentId() : null;
+    }
+
+    public List<UserResponse> search(String q, String rolesCsv, int limit) {
+        if (rolesCsv == null || rolesCsv.isBlank()) {
+            throw new BadRequestException("roles is required (comma-separated)");
+        }
+        java.util.Set<String> roles = java.util.Arrays.stream(rolesCsv.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty())
+                .map(String::toUpperCase).collect(Collectors.toSet());
+        for (String r : roles) {
+            if (!Roles.isValid(r)) throw new BadRequestException("Unknown role: " + r);
+        }
+        int capped = Math.max(1, Math.min(limit, 100));
+        org.springframework.data.domain.Pageable page =
+                org.springframework.data.domain.PageRequest.of(0, capped);
+        return userRepository.searchByRoles(roles, q == null ? "" : q.trim(), page).stream()
                 .map(UserResponse::from).collect(Collectors.toList());
     }
 
-    public List<UserResponse> getPendingInstructors() {
-        return userRepository.findByRoleAndStatus(ROLE_INSTRUCTOR, STATUS_PENDING).stream()
-                .map(UserResponse::from).collect(Collectors.toList());
+    public List<UserResponse> getPendingInstructors(Long departmentId) {
+        // DEPT_ADMIN always sees only their own department, even if they pass ?departmentId=
+        Long deptScope = deptScopeForCaller();
+        Long effective = (deptScope != null) ? deptScope : departmentId;
+        List<User> rows = (effective != null)
+                ? userRepository.findByRoleAndStatusAndDepartmentId(Roles.INSTRUCTOR, STATUS_PENDING, effective)
+                : userRepository.findByRoleAndStatus(Roles.INSTRUCTOR, STATUS_PENDING);
+        return rows.stream().map(UserResponse::from).collect(Collectors.toList());
     }
 
     public UserResponse approveInstructor(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
-        if (!ROLE_INSTRUCTOR.equals(user.getRole())) {
+        if (!Roles.INSTRUCTOR.equals(user.getRole())) {
             throw new BadRequestException("User is not an instructor");
         }
+        ensureCallerCanManage(user);
         if (STATUS_ACTIVE.equals(user.getStatus())) {
             throw new ConflictException("Instructor is already active");
         }
         user.setStatus(STATUS_ACTIVE);
         User saved = userRepository.save(user);
 
-        // Notify the instructor (in-app notification — also serves as the "permission email")
-        try {
-            notificationClient.send(Map.of(
-                    "userId", saved.getId(),
-                    "title", "Instructor account approved",
-                    "message", "Your account has been approved by admin. You can now log in.",
-                    "type", "ACCOUNT_APPROVED"
-            ));
-        } catch (Exception e) {
-            System.err.println("Warning: failed to send approval notification: " + e.getMessage());
-        }
+        notifier.publish(new NotificationEvent.InstructorApproved(saved.getId()));
         return UserResponse.from(saved);
     }
 
     public void rejectInstructor(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
-        if (!ROLE_INSTRUCTOR.equals(user.getRole())) {
+        if (!Roles.INSTRUCTOR.equals(user.getRole())) {
             throw new BadRequestException("User is not an instructor");
         }
+        ensureCallerCanManage(user);
         userRepository.delete(user);
+    }
+
+    /** Department admins can only act on users that belong to their own department. */
+    private void ensureCallerCanManage(User target) {
+        Long deptScope = deptScopeForCaller();
+        if (deptScope == null) return; // MAIN_ADMIN
+        if (target.getDepartmentId() == null || !deptScope.equals(target.getDepartmentId())) {
+            throw new AuthorizationException("Department admins can only manage users in their own department");
+        }
     }
 
     public Map<String, Boolean> checkAvailability(String email, String enNumber, String indexNumber) {
         Map<String, Boolean> result = new HashMap<>();
-        result.put("emailTaken", !isBlank(email) && userRepository.existsByEmail(email));
-        result.put("enTaken", !isBlank(enNumber) && userRepository.existsByEnNumber(enNumber));
-        result.put("indexTaken", !isBlank(indexNumber) && userRepository.existsByIndexNumber(indexNumber));
+        result.put("emailTaken",  !isBlank(email)      && userRepository.existsByEmail(lower(email)));
+        result.put("enTaken",     !isBlank(enNumber)   && userRepository.existsByEnNumber(enNumber.toUpperCase()));
+        result.put("indexTaken",  !isBlank(indexNumber)&& userRepository.existsByIndexNumber(indexNumber));
         return result;
     }
 
-    private boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+    private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
+    private static String lower(String s)    { return s == null ? null : s.trim().toLowerCase(); }
 }

@@ -22,6 +22,7 @@ const EMPTY = {
   serialNumber: '',
   status: 'AVAILABLE',
   description: '',
+  labId: '',
 };
 
 export default function AddEquipment() {
@@ -32,6 +33,18 @@ export default function AddEquipment() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [recent, setRecent] = useState([]);
+  const [myLabs, setMyLabs] = useState([]);
+
+  const loadLabs = async () => {
+    try {
+      // Show only labs assigned to this instructor.
+      const { data } = await labApi.list({ instructorUserId: me?.id });
+      setLabs(data);
+      if (data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
+    } catch {
+      setLabs([]);
+    }
+  };
 
   const loadRecent = async (isCancelled) => {
     try {
@@ -160,6 +173,12 @@ export default function AddEquipment() {
                        placeholder="C012345" />
                 <span className="field-hint">Optional — useful for tracking the physical unit.</span>
               </div>
+            </div>
+            <div className="field">
+              <label>Location <span className="req">*</span></label>
+              <input value={form.location} required onChange={set('location')}
+                     placeholder="Lab A-101" />
+              <span className="field-hint">Building + room number (free text — different from the Lab record above).</span>
             </div>
           </div>
 

@@ -53,10 +53,10 @@ export default function Home() {
           <div className="home-hero-copy">
             <div className="home-eyebrow">
               <span className="home-eyebrow-dot" />
-              Faculty of Engineering · Lab Booking Platform
+              Faculty of Engineering · Equipment Booking Platform
             </div>
             <h1 className="home-headline">
-              Reserve <em>lab equipment</em><br />
+              Reserve <em>equipment</em><br />
               in minutes — not days.
             </h1>
             <p className="home-lede">
@@ -106,18 +106,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="hero-card hero-card-mini hero-card-mini-a">
-              <div className="hero-mini-icon">✓</div>
-              <div>
-                <div className="hero-mini-title">Approved by Dr. Perera</div>
-                <div className="hero-mini-sub">3D Printer · Lab B-203</div>
-              </div>
-            </div>
+            
 
-            <div className="hero-card hero-card-mini hero-card-mini-b">
-              <div className="hero-mini-num">1M+</div>
-              <div className="hero-mini-sub">student hours saved</div>
-            </div>
 
             <div className="hero-bg-blob" aria-hidden="true" />
           </div>
@@ -127,7 +117,7 @@ export default function Home() {
       {/* === How it works === */}
       <section className="home-how" id="how">
         <div className="home-section-head">
-          <div className="home-section-eyebrow">— How it works</div>
+          
           <h2 className="home-section-title">Three steps from request to lab bench.</h2>
         </div>
 
@@ -153,7 +143,7 @@ export default function Home() {
       {/* === Categories === */}
       <section className="home-cats" id="categories">
         <div className="home-section-head">
-          <div className="home-section-eyebrow">— Browse by department</div>
+
           <h2 className="home-section-title">Equipment from every engineering discipline.</h2>
         </div>
 
@@ -179,7 +169,7 @@ export default function Home() {
         <div className="home-cta-strip-inner">
           <div>
             <div className="home-section-eyebrow">— Ready to book?</div>
-            <h2 className="home-section-title light">Your next lab session is one click away.</h2>
+            <h2 className="home-section-title light">Your next equipment is one click away.</h2>
           </div>
           <div className="home-cta-strip-actions">
             <Link to="/register" className="btn-pill btn-pill-accent btn-pill-lg">Create your account</Link>

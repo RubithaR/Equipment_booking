@@ -23,6 +23,7 @@ public class FeignNotifier implements Notifier<NotificationEvent> {
         switch (event) {
             case NotificationEvent.InstructorApproved e -> dispatch(
                     e.instructorId(), "INSTRUCTOR_ACCOUNT_APPROVED", Map.of());
+            default -> log.warn("Unknown notification event type: {}", event.getClass().getSimpleName());
         }
     }
 

@@ -91,6 +91,12 @@ export default function Equipment() {
                     {e.model ? ' · ' : ''}{labText(e.labId)}
                     {e.description ? ` · ${e.description}` : ''}
                   </div>
+                  {e.instructorNames && e.instructorNames.length > 0 && (
+                    <div className="eq-instructors">
+                      <span className="eq-instructors-label">Instructor{e.instructorNames.length > 1 ? 's' : ''}:</span>{' '}
+                      {e.instructorNames.join(', ')}
+                    </div>
+                  )}
                   <div className="eq-foot">
                     <div>
                       <div className="eq-foot-label">Status</div>

@@ -224,6 +224,56 @@ public class UserService {
         }
     }
 
+    public List<UserResponse> getPendingStudentsForInstructor(Long instructorId) {
+        User instructor = userRepository.findById(instructorId)
+                .orElseThrow(() -> new NotFoundException("Instructor not found with id: " + instructorId));
+        if (!Roles.LECTURER.equals(instructor.getRole())) {
+            throw new BadRequestException("User is not a lecturer");
+        }
+        Long deptId = instructor.getDepartmentId();
+        List<User> rows = userRepository.findByRoleAndStatusAndDepartmentId(Roles.STUDENT, STATUS_PENDING, deptId);
+        return rows.stream().map(UserResponse::from).collect(Collectors.toList());
+    }
+
+    public UserResponse approveStudent(Long id, Long instructorId) {
+        User student = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
+        if (!Roles.STUDENT.equals(student.getRole())) {
+            throw new BadRequestException("User is not a student");
+        }
+        User instructor = userRepository.findById(instructorId)
+                .orElseThrow(() -> new NotFoundException("Instructor not found with id: " + instructorId));
+        if (!Roles.LECTURER.equals(instructor.getRole())) {
+            throw new BadRequestException("User is not a lecturer");
+        }
+        if (!student.getDepartmentId().equals(instructor.getDepartmentId())) {
+            throw new AuthorizationException("Lecturer can only approve students in their own department");
+        }
+        if (STATUS_ACTIVE.equals(student.getStatus())) {
+            throw new ConflictException("Student is already active");
+        }
+        student.setStatus(STATUS_ACTIVE);
+        User saved = userRepository.save(student);
+        return UserResponse.from(saved);
+    }
+
+    public void rejectStudent(Long id, Long instructorId) {
+        User student = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
+        if (!Roles.STUDENT.equals(student.getRole())) {
+            throw new BadRequestException("User is not a student");
+        }
+        User instructor = userRepository.findById(instructorId)
+                .orElseThrow(() -> new NotFoundException("Instructor not found with id: " + instructorId));
+        if (!Roles.LECTURER.equals(instructor.getRole())) {
+            throw new BadRequestException("User is not a lecturer");
+        }
+        if (!student.getDepartmentId().equals(instructor.getDepartmentId())) {
+            throw new AuthorizationException("Lecturer can only reject students in their own department");
+        }
+        userRepository.delete(student);
+    }
+
     public Map<String, Boolean> checkAvailability(String email, String enNumber, String indexNumber) {
         Map<String, Boolean> result = new HashMap<>();
         result.put("emailTaken",  !isBlank(email)      && userRepository.existsByEmail(lower(email)));

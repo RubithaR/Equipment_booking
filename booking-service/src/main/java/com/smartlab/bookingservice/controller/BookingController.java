@@ -4,6 +4,7 @@ import com.smartlab.bookingservice.dto.AttachmentResponse;
 import com.smartlab.bookingservice.dto.BookingRequest;
 import com.smartlab.bookingservice.dto.BookingResponse;
 import com.smartlab.bookingservice.dto.EventResponse;
+import com.smartlab.bookingservice.dto.ItemAvailabilityResponse;
 import com.smartlab.bookingservice.service.BookingService;
 import com.smartlab.bookingservice.transition.Transition;
 import jakarta.validation.Valid;
@@ -58,6 +59,16 @@ public class BookingController {
     @GetMapping
     public ResponseEntity<List<BookingResponse>> listAll(@RequestParam(required = false) String state) {
         return ResponseEntity.ok(bookingService.listAll(state));
+    }
+
+    /**
+     * Booking-derived availability for the given items — drives the student
+     * catalogue's "In process" / "In use" badges and the cart's date-overlap
+     * warnings. Call with {@code ?itemIds=1,2,3}.
+     */
+    @GetMapping("/availability")
+    public ResponseEntity<List<ItemAvailabilityResponse>> availability(@RequestParam List<Long> itemIds) {
+        return ResponseEntity.ok(bookingService.availability(itemIds));
     }
 
     /**

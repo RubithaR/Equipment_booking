@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { itemApi, labApi } from '../../api';
+import { bookingApi, itemApi, labApi } from '../../api';
 import { addToCart, isInCart, removeFromCart, subscribeCart } from '../../cart';
-import { byId } from '../../utils/format';
+import { byId, fmt } from '../../utils/format';
 
 export default function Equipment() {
   const [items, setItems] = useState([]);
   const [labs, setLabs] = useState([]);
+  const [availMap, setAvailMap] = useState({});   // itemId -> { status, bookedUntil }
   const [filter, setFilter] = useState('ALL');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -21,6 +22,15 @@ export default function Equipment() {
         const [itemsRes, labsRes] = await Promise.all([itemApi.list(), labApi.list()]);
         setItems(itemsRes.data);
         setLabs(labsRes.data);
+
+        // Overlay booking-derived availability (in process / in use + booked-until date).
+        const ids = itemsRes.data.map((i) => i.id);
+        if (ids.length) {
+          try {
+            const { data } = await bookingApi.availability(ids);
+            setAvailMap(byId(data.map((a) => ({ ...a, id: a.itemId }))));
+          } catch { /* availability is best-effort; catalogue still works without it */ }
+        }
       } finally {
         setLoading(false);
       }
@@ -34,8 +44,16 @@ export default function Equipment() {
     return l.location ? `${l.name} · ${l.location}` : l.name;
   };
 
+  // Effective status shown to students: admin block (maintenance/out of service)
+  // wins; otherwise the booking-derived bucket (available / in process / in use).
+  const bucketOf = (e) => {
+    const adminStatus = (e.status || 'AVAILABLE').toUpperCase();
+    if (adminStatus === 'MAINTENANCE' || adminStatus === 'OUT_OF_SERVICE') return adminStatus;
+    return availMap[e.id]?.status || 'AVAILABLE';
+  };
+
   const filtered = items.filter((e) => {
-    if (filter !== 'ALL' && e.status !== filter) return false;
+    if (filter !== 'ALL' && bucketOf(e) !== filter) return false;
     if (search) {
       const lab = labLookup[e.labId];
       const haystack = `${e.name} ${e.model || ''} ${e.category} ${lab?.name || ''} ${lab?.location || ''}`.toLowerCase();
@@ -55,6 +73,7 @@ export default function Equipment() {
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="ALL">All statuses</option>
           <option value="AVAILABLE">Available</option>
+          <option value="IN_PROCESS">In process</option>
           <option value="IN_USE">In use</option>
           <option value="MAINTENANCE">Maintenance</option>
           <option value="OUT_OF_SERVICE">Out of service</option>
@@ -67,17 +86,23 @@ export default function Equipment() {
         ) : (
           <div className="equip-grid">
             {filtered.map((e) => {
-              const status = (e.status || 'AVAILABLE').toUpperCase();
-              const statusClass = status === 'AVAILABLE' ? 'eq-status-ok'
-                                : status === 'IN_USE' ? 'eq-status-busy'
+              const adminStatus = (e.status || 'AVAILABLE').toUpperCase();
+              const blocked = adminStatus === 'MAINTENANCE' || adminStatus === 'OUT_OF_SERVICE';
+              // Booking-derived bucket (in process / in use) takes over once the item is bookable.
+              const bucket = bucketOf(e);
+              const bookedUntil = availMap[e.id]?.bookedUntil;
+
+              const statusClass = bucket === 'AVAILABLE' ? 'eq-status-ok'
+                                : (bucket === 'IN_USE' || bucket === 'IN_PROCESS') ? 'eq-status-busy'
                                 : 'eq-status-warn';
-              const statusLabel = status === 'IN_USE' ? 'In use'
-                                : status === 'MAINTENANCE' ? 'Maintenance'
-                                : status === 'OUT_OF_SERVICE' ? 'Out of service'
+              const statusLabel = bucket === 'IN_USE' ? 'In use'
+                                : bucket === 'IN_PROCESS' ? 'In process'
+                                : bucket === 'MAINTENANCE' ? 'Maintenance'
+                                : bucket === 'OUT_OF_SERVICE' ? 'Out of service'
                                 : 'Available';
               const lab = labLookup[e.labId];
-              const bookable = (status === 'AVAILABLE' || status === 'IN_USE')
-                               && lab?.instructorUserId;
+              // Booked items stay bookable — students just pick a date after bookedUntil.
+              const bookable = !blocked && lab?.instructorUserId;
               const inCart = isInCart(e.id);
               return (
                 <article key={e.id} className="eq-card">
@@ -101,6 +126,11 @@ export default function Equipment() {
                     <div>
                       <div className="eq-foot-label">Status</div>
                       <div className="eq-foot-value">{statusLabel}</div>
+                      {bookedUntil && (bucket === 'IN_USE' || bucket === 'IN_PROCESS') && (
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                          Booked until {fmt(bookedUntil)} — pick a later start.
+                        </div>
+                      )}
                     </div>
                     {!bookable ? (
                       <button className="btn-pill btn-pill-ghost btn-pill-sm" disabled>

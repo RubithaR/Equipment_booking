@@ -284,6 +284,39 @@ public class BookingService {
         return hydrate(rows);
     }
 
+    /**
+     * Booking-derived availability for a set of items — what the student catalogue
+     * and cart use to show "in process" / "in use" and the date each item is free
+     * again. Items with no active hold come back as AVAILABLE so the caller can
+     * render every requested id in one pass.
+     */
+    public List<ItemAvailabilityResponse> availability(List<Long> itemIds) {
+        CurrentUser.require();
+        if (itemIds == null || itemIds.isEmpty()) return List.of();
+
+        Map<Long, List<ActiveWindow>> byItem = itemRepository.findActiveWindows(itemIds).stream()
+                .collect(Collectors.groupingBy(ActiveWindow::itemId));
+
+        List<ItemAvailabilityResponse> out = new ArrayList<>();
+        for (Long itemId : itemIds) {
+            List<ActiveWindow> holds = byItem.get(itemId);
+            if (holds == null || holds.isEmpty()) {
+                out.add(new ItemAvailabilityResponse(itemId, "AVAILABLE", null, List.of()));
+                continue;
+            }
+            boolean inUse = holds.stream().anyMatch(w -> BookingState.IN_USE.contains(w.state()));
+            LocalDateTime bookedUntil = holds.stream()
+                    .map(ActiveWindow::end).max(LocalDateTime::compareTo).orElse(null);
+            List<ItemAvailabilityResponse.Window> windows = holds.stream()
+                    .map(w -> new ItemAvailabilityResponse.Window(
+                            w.start(), w.end(), w.state(), BookingState.availabilityBucket(w.state())))
+                    .collect(Collectors.toList());
+            out.add(new ItemAvailabilityResponse(
+                    itemId, inUse ? "IN_USE" : "IN_PROCESS", bookedUntil, windows));
+        }
+        return out;
+    }
+
     public List<EventResponse> timeline(Long bookingId) {
         Booking b = getOrThrow(bookingId);
         List<BookingItem> items = itemRepository.findByBookingIdOrderByIdAsc(bookingId);

@@ -4,6 +4,7 @@ import { bookingApi, errMsg, labApi, userApi } from '../../api';
 import { getCurrentUser } from '../../auth';
 import { clearCart, getCart, removeFromCart, subscribeCart } from '../../cart';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
+import { fmt } from '../../utils/format';
 
 export default function BookCart() {
   const me = getCurrentUser();
@@ -12,6 +13,7 @@ export default function BookCart() {
   const [cart, setCart] = useState(getCart());
   const [labMap, setLabMap] = useState({});                  // labId -> { name, location, instructorUserId }
   const [instructorMap, setInstructorMap] = useState({});    // userId -> UserResponse
+  const [availMap, setAvailMap] = useState({});              // itemId -> { status, bookedUntil, windows }
 
   // Form fields shared across the whole booking.
   const [projectName, setProjectName] = useState('');
@@ -30,6 +32,7 @@ export default function BookCart() {
     if (labIds.length === 0) {
       setLabMap({});
       setInstructorMap({});
+      setAvailMap({});
       return;
     }
     const lm = {};
@@ -43,8 +46,27 @@ export default function BookCart() {
     await Promise.all(insIds.map(async (id) => {
       try { const { data } = await userApi.getById(id); im[id] = data; } catch {}
     }));
-    if (!isCancelled()) setInstructorMap(im);
+    if (isCancelled()) return;
+    setInstructorMap(im);
+
+    // Booking windows already held on these items, to warn about date overlaps.
+    try {
+      const { data } = await bookingApi.availability(cart.map((c) => c.itemId));
+      if (!isCancelled()) {
+        setAvailMap(Object.fromEntries(data.map((a) => [a.itemId, a])));
+      }
+    } catch { /* best-effort; server still rejects true conflicts on submit */ }
   }, [cart]);
+
+  // Lines whose chosen window collides with an existing hold on the same item.
+  const start = startDate ? new Date(startDate) : null;
+  const ret = returnDate ? new Date(returnDate) : null;
+  const datesValid = !!(start && ret && ret > start);
+  const conflicts = datesValid
+    ? cart.filter((c) => (availMap[c.itemId]?.windows || [])
+        .some((w) => new Date(w.start) < ret && new Date(w.end) > start))
+    : [];
+  const conflictIds = new Set(conflicts.map((c) => c.itemId));
 
   // Group lines by lab so the form makes the per-instructor approval explicit.
   const groupedByLab = cart.reduce((acc, line) => {
@@ -85,6 +107,12 @@ export default function BookCart() {
     if (blockingLab) {
       const [labId] = blockingLab;
       setError(`Lab ${labMap[labId]?.name || `#${labId}`} has no instructor assigned — remove its items.`);
+      return;
+    }
+    // Refuse if any item is already booked for an overlapping window (server enforces this too).
+    if (conflicts.length) {
+      const names = conflicts.map((c) => c.name).join(', ');
+      setError(`Already booked for these dates: ${names}. Pick a later start date or remove them.`);
       return;
     }
 
@@ -167,6 +195,21 @@ export default function BookCart() {
                          onChange={(e) => setReturnDate(e.target.value)} />
                 </div>
               </div>
+              {conflicts.length > 0 && (
+                <div className="alert alert-error" style={{ marginTop: 12 }}>
+                  These items are already booked for your selected dates — pick a later start, or remove them:
+                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                    {conflicts.map((c) => (
+                      <li key={c.itemId}>
+                        <strong>{c.name}</strong>
+                        {availMap[c.itemId]?.bookedUntil
+                          ? ` — booked until ${fmt(availMap[c.itemId].bookedUntil)}`
+                          : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </Section>
 
             <Section num="03" title="Attachments" sub="Request letter, supervisor letter, related docs (optional).">
@@ -207,7 +250,8 @@ export default function BookCart() {
 
             <div className="add-eq-actions">
               <Link to="/student/equipment" className="btn-pill btn-pill-ghost">Cancel</Link>
-              <button type="submit" className="btn-pill btn-pill-solid btn-pill-lg" disabled={busy}>
+              <button type="submit" className="btn-pill btn-pill-solid btn-pill-lg"
+                      disabled={busy || conflicts.length > 0}>
                 {busy ? 'Submitting…' : `Submit ${cart.length} item${cart.length === 1 ? '' : 's'} →`}
               </button>
             </div>
@@ -238,6 +282,15 @@ export default function BookCart() {
                           <div style={{ flex: 1 }}>
                             <div>{l.name}</div>
                             <div style={{ fontSize: 12, color: 'var(--muted)' }}>{l.model}</div>
+                            {availMap[l.itemId]?.bookedUntil && (
+                              <div style={{
+                                fontSize: 11,
+                                color: conflictIds.has(l.itemId) ? 'var(--danger, #c0392b)' : 'var(--muted)',
+                              }}>
+                                {conflictIds.has(l.itemId) ? '⚠ Overlaps — ' : ''}
+                                booked until {fmt(availMap[l.itemId].bookedUntil)}
+                              </div>
+                            )}
                           </div>
                           <button type="button" className="btn btn-secondary btn-sm"
                                   onClick={() => removeFromCart(l.itemId)}>

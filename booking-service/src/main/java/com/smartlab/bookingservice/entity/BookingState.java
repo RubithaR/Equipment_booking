@@ -27,6 +27,21 @@ public final class BookingState {
             SUBMITTED, INSTRUCTOR_REVIEWING, AWAITING_SUPERVISOR, SUPERVISOR_APPROVED,
             READY_FOR_COLLECTION, COLLECTED, OVERDUE);
 
+    /** Held, but still awaiting an approval decision — shown to students as "In process". */
+    public static final Set<String> IN_PROCESS = Set.of(
+            SUBMITTED, INSTRUCTOR_REVIEWING, AWAITING_SUPERVISOR);
+
+    /** Approved and reserved for collection/use — shown to students as "In use". */
+    public static final Set<String> IN_USE = Set.of(
+            SUPERVISOR_APPROVED, READY_FOR_COLLECTION, COLLECTED, OVERDUE);
+
+    /** Map a per-item state to the student-facing availability bucket. */
+    public static String availabilityBucket(String state) {
+        if (IN_USE.contains(state))     return "IN_USE";
+        if (IN_PROCESS.contains(state)) return "IN_PROCESS";
+        return "AVAILABLE";
+    }
+
     /** Per-item terminal states. */
     public static final Set<String> TERMINAL = Set.of(
             INSTRUCTOR_REJECTED, SUPERVISOR_DECLINED, RETURNED, CANCELLED);

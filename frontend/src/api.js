@@ -103,6 +103,9 @@ export const bookingApi = {
   create: (data) => api.post('/api/bookings', data),
   list: (state) => api.get('/api/bookings', { params: state ? { state } : {} }),
   get: (id) => api.get(`/api/bookings/${id}`),
+  // Booking-derived availability for a set of items: [{ itemId, status, bookedUntil, windows }]
+  availability: (itemIds) =>
+    api.get('/api/bookings/availability', { params: { itemIds: itemIds.join(',') } }),
   mine: () => api.get('/api/bookings/mine'),
   assignedToMe: () => api.get('/api/bookings/assigned-to-me'),
   awaitingMySupervision: () => api.get('/api/bookings/awaiting-my-supervision'),

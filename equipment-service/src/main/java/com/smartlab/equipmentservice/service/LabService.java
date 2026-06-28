@@ -1,124 +1,140 @@
 package com.smartlab.equipmentservice.service;
 
 import com.smartlab.equipmentservice.client.UserClient;
+import com.smartlab.equipmentservice.client.UserSummary;
 import com.smartlab.equipmentservice.dto.LabRequest;
 import com.smartlab.equipmentservice.dto.LabResponse;
-import com.smartlab.equipmentservice.dto.UserDto;
 import com.smartlab.equipmentservice.entity.Lab;
-import com.smartlab.equipmentservice.entity.LabInstructor;
-import com.smartlab.equipmentservice.repository.LabInstructorRepository;
+import com.smartlab.security.Roles;
+import com.smartlab.security.exception.BadRequestException;
+import com.smartlab.security.exception.ConflictException;
+import com.smartlab.security.exception.NotFoundException;
 import com.smartlab.equipmentservice.repository.LabRepository;
+import com.smartlab.security.CurrentUser;
+import com.smartlab.security.UserContext;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class LabService {
 
-    private static final Logger log = LoggerFactory.getLogger(LabService.class);
+    private static final String STATUS_ACTIVE = "ACTIVE";
 
     private final LabRepository labRepository;
-    private final LabInstructorRepository labInstructorRepository;
     private final UserClient userClient;
 
     public LabResponse create(LabRequest request) {
-        if (labRepository.existsByName(request.getName())) {
-            throw new IllegalStateException("Lab name already exists: " + request.getName());
+        UserContext me = CurrentUser.require();
+        ensureCanManageDepartment(me, request.getDepartmentId());
+
+        if (labRepository.existsByDepartmentIdAndName(request.getDepartmentId(), request.getName())) {
+            throw new ConflictException("A lab with that name already exists in this department");
         }
+        if (request.getInstructorUserId() != null) {
+            verifyInstructor(request.getInstructorUserId(), request.getDepartmentId());
+        }
+
         Lab lab = new Lab();
+        lab.setDepartmentId(request.getDepartmentId());
         lab.setName(request.getName());
-        Lab saved = labRepository.save(lab);
-        return LabResponse.fromEntity(saved, List.of());
+        lab.setLocation(request.getLocation());
+        lab.setDescription(request.getDescription());
+        lab.setInstructorUserId(request.getInstructorUserId());
+        return LabResponse.from(labRepository.save(lab));
     }
 
-    public List<LabResponse> getAll() {
-        return labRepository.findAll().stream()
-                .map(lab -> LabResponse.fromEntity(lab, fetchInstructors(lab.getId())))
-                .toList();
+    public List<LabResponse> list(Long departmentId, Long instructorUserId) {
+        List<Lab> rows;
+        if (departmentId != null) {
+            rows = labRepository.findByDepartmentId(departmentId);
+        } else if (instructorUserId != null) {
+            rows = labRepository.findByInstructorUserId(instructorUserId);
+        } else {
+            rows = labRepository.findAll();
+        }
+        return rows.stream().map(LabResponse::from).collect(Collectors.toList());
     }
 
     public LabResponse getById(Long id) {
-        Lab lab = labRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Lab not found with id: " + id));
-        return LabResponse.fromEntity(lab, fetchInstructors(lab.getId()));
+        return LabResponse.from(getOrThrow(id));
     }
 
-    @Transactional
+    public LabResponse update(Long id, LabRequest request) {
+        UserContext me = CurrentUser.require();
+        Lab lab = getOrThrow(id);
+        ensureCanManageDepartment(me, lab.getDepartmentId());
+
+        if (request.getDepartmentId() != null && !request.getDepartmentId().equals(lab.getDepartmentId())) {
+            throw new BadRequestException("Lab cannot be moved between departments");
+        }
+        if (!lab.getName().equals(request.getName())
+                && labRepository.existsByDepartmentIdAndName(lab.getDepartmentId(), request.getName())) {
+            throw new ConflictException("A lab with that name already exists in this department");
+        }
+        if (request.getInstructorUserId() != null) {
+            verifyInstructor(request.getInstructorUserId(), lab.getDepartmentId());
+        }
+
+        lab.setName(request.getName());
+        lab.setLocation(request.getLocation());
+        lab.setDescription(request.getDescription());
+        lab.setInstructorUserId(request.getInstructorUserId());
+        return LabResponse.from(labRepository.save(lab));
+    }
+
+    public LabResponse assignInstructor(Long labId, Long instructorUserId) {
+        UserContext me = CurrentUser.require();
+        Lab lab = getOrThrow(labId);
+        ensureCanManageDepartment(me, lab.getDepartmentId());
+
+        if (instructorUserId != null) {
+            verifyInstructor(instructorUserId, lab.getDepartmentId());
+        }
+        lab.setInstructorUserId(instructorUserId);
+        return LabResponse.from(labRepository.save(lab));
+    }
+
     public void delete(Long id) {
-        if (!labRepository.existsById(id)) {
-            throw new IllegalArgumentException("Lab not found with id: " + id);
-        }
-        labInstructorRepository.deleteByLabId(id);
-        labRepository.deleteById(id);
-    }
-
-    public LabResponse assignInstructor(Long labId, Long instructorId) {
-        Lab lab = labRepository.findById(labId)
-                .orElseThrow(() -> new IllegalArgumentException("Lab not found with id: " + labId));
-
-        // Verify instructor exists and has the right role
-        UserDto user;
-        try {
-            user = userClient.getUserById(instructorId);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Instructor not found with id: " + instructorId);
-        }
-        if (!"INSTRUCTOR".equalsIgnoreCase(user.getRole())) {
-            throw new IllegalArgumentException("User is not an instructor");
-        }
-        if (labInstructorRepository.existsByLabIdAndInstructorId(labId, instructorId)) {
-            throw new IllegalStateException("Instructor already assigned to this lab");
-        }
-
-        LabInstructor link = new LabInstructor();
-        link.setLabId(labId);
-        link.setInstructorId(instructorId);
-        labInstructorRepository.save(link);
-
-        return LabResponse.fromEntity(lab, fetchInstructors(labId));
-    }
-
-    public void unassignInstructor(Long labId, Long instructorId) {
-        LabInstructor link = labInstructorRepository.findByLabIdAndInstructorId(labId, instructorId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Instructor " + instructorId + " is not assigned to lab " + labId));
-        labInstructorRepository.delete(link);
-    }
-
-    public List<LabResponse> getLabsForInstructor(Long instructorId) {
-        List<LabInstructor> links = labInstructorRepository.findByInstructorId(instructorId);
-        List<Long> labIds = links.stream().map(LabInstructor::getLabId).toList();
-        return labRepository.findAllById(labIds).stream()
-                .map(lab -> LabResponse.fromEntity(lab, fetchInstructors(lab.getId())))
-                .toList();
-    }
-
-    public boolean isInstructorAssignedToLab(Long instructorId, Long labId) {
-        return labInstructorRepository.existsByLabIdAndInstructorId(labId, instructorId);
+        UserContext me = CurrentUser.require();
+        Lab lab = getOrThrow(id);
+        ensureCanManageDepartment(me, lab.getDepartmentId());
+        labRepository.delete(lab);
     }
 
     // ===== helpers =====
 
-    private List<LabResponse.InstructorBrief> fetchInstructors(Long labId) {
-        List<LabInstructor> links = labInstructorRepository.findByLabId(labId);
-        List<LabResponse.InstructorBrief> result = new ArrayList<>();
-        for (LabInstructor link : links) {
-            try {
-                UserDto user = userClient.getUserById(link.getInstructorId());
-                result.add(new LabResponse.InstructorBrief(
-                        user.getId(), user.getFullName(), user.getDepartment()));
-            } catch (Exception e) {
-                log.warn("Failed to fetch instructor id={} for lab id={}", link.getInstructorId(), labId, e);
-                result.add(new LabResponse.InstructorBrief(
-                        link.getInstructorId(), "(unknown)", null));
-            }
+    private Lab getOrThrow(Long id) {
+        return labRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Lab not found: " + id));
+    }
+
+    private void ensureCanManageDepartment(UserContext me, Long departmentId) {
+        if (me.hasRole(Roles.MAIN_ADMIN)) return;
+        if (me.hasRole(Roles.DEPT_ADMIN) && departmentId != null && departmentId.equals(me.departmentId())) return;
+        throw new BadRequestException("You can only manage labs within your own department");
+    }
+
+    private void verifyInstructor(Long userId, Long departmentId) {
+        UserSummary u;
+        try {
+            u = userClient.getUserById(userId);
+        } catch (Exception e) {
+            throw new BadRequestException("Instructor not found: " + userId);
         }
-        return result;
+        if (u == null) throw new BadRequestException("Instructor not found: " + userId);
+        if (!Roles.INSTRUCTOR.equals(u.getRole())) {
+            throw new BadRequestException("User " + userId + " is not an instructor");
+        }
+        if (!STATUS_ACTIVE.equals(u.getStatus())) {
+            throw new BadRequestException("Instructor is not active yet");
+        }
+        if (u.getDepartmentId() != null && departmentId != null
+                && !u.getDepartmentId().equals(departmentId)) {
+            throw new BadRequestException("Instructor belongs to a different department");
+        }
     }
 }

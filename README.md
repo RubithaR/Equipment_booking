@@ -27,6 +27,7 @@ Eureka dashboard: <http://localhost:8761>. Gateway entry point: <http://localhos
 ```bash
 cp .env.example .env
 # edit .env and set DB_PASSWORD to your Supabase password
+# if your Supabase project uses a different pooled URL/role, also set DB_URL and DB_USERNAME there
 ```
 
 Optional overrides in `.env` (defaults are baked into each service's `application.properties`):

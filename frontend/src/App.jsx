@@ -11,6 +11,7 @@ import Notifications from './pages/Notifications';
 
 import StudentEquipment from './pages/student/Equipment';
 import MyBookings from './pages/student/MyBookings';
+import BookCart from './pages/student/BookCart';
 
 import PendingBookings from './pages/instructor/PendingBookings';
 import AllBookings from './pages/instructor/AllBookings';
@@ -22,6 +23,9 @@ import PendingInstructors from './pages/admin/PendingInstructors';
 import Users from './pages/admin/Users';
 import AdminEquipment from './pages/admin/Equipment';
 import AdminLabs from './pages/admin/Labs';
+import AdminDepartments from './pages/admin/Departments';
+
+import SupervisorQueue from './pages/supervisor/Queue';
 
 function Shell() {
   return (
@@ -56,6 +60,7 @@ export default function App() {
         <Route element={<ProtectedRoute roles={['STUDENT']}><Shell /></ProtectedRoute>}>
           <Route path="/student" element={<Navigate to="/student/equipment" replace />} />
           <Route path="/student/equipment" element={<StudentEquipment />} />
+          <Route path="/student/cart" element={<BookCart />} />
           <Route path="/student/bookings" element={<MyBookings />} />
           <Route path="/student/notifications" element={<Notifications />} />
         </Route>
@@ -69,13 +74,20 @@ export default function App() {
           <Route path="/instructor/notifications" element={<Notifications />} />
         </Route>
 
-        <Route element={<ProtectedRoute roles={['ADMIN']}><Shell /></ProtectedRoute>}>
+        <Route element={<ProtectedRoute roles={['HOD', 'LECTURER']}><Shell /></ProtectedRoute>}>
+          <Route path="/supervisor" element={<Navigate to="/supervisor/queue" replace />} />
+          <Route path="/supervisor/queue" element={<SupervisorQueue />} />
+          <Route path="/supervisor/notifications" element={<Notifications />} />
+        </Route>
+
+        <Route element={<ProtectedRoute roles={['MAIN_ADMIN', 'DEPT_ADMIN']}><Shell /></ProtectedRoute>}>
           <Route path="/admin" element={<AdminOverview />} />
           <Route path="/admin/instructors-pending" element={<PendingInstructors />} />
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/bookings" element={<AllBookings />} />
           <Route path="/admin/equipment" element={<AdminEquipment />} />
           <Route path="/admin/labs" element={<AdminLabs />} />
+          <Route path="/admin/departments" element={<AdminDepartments />} />
           <Route path="/admin/notifications" element={<Notifications />} />
         </Route>
 

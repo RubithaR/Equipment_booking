@@ -1,7 +1,7 @@
 package com.smartlab.userservice.security;
 
-import java.util.List;
-
+import com.smartlab.security.JwtAuthFilter;
+import com.smartlab.security.Roles;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,9 +16,13 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.List;
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private static final String[] ADMIN_ROLES = {Roles.MAIN_ADMIN, Roles.DEPT_ADMIN};
 
     private final JwtAuthFilter jwtAuthFilter;
 
@@ -50,18 +54,15 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/users/register", "/api/users/login").permitAll()
-                // Admin-only endpoints
-                .requestMatchers("/api/users/instructors/pending").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PATCH, "/api/users/*/approve").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/users/*/reject").hasRole("ADMIN")
-                .requestMatchers("/api/users/by-role/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/users").hasRole("ADMIN")
-                // Instructor-only endpoints (student approval flow)
-                .requestMatchers("/api/users/students/pending").hasRole("INSTRUCTOR")
-                .requestMatchers(HttpMethod.PATCH, "/api/users/*/approve-student").hasRole("INSTRUCTOR")
-                .requestMatchers(HttpMethod.DELETE, "/api/users/*/reject-student").hasRole("INSTRUCTOR")
-                // Inter-service GET by id stays open (booking-service Feign call)
+                .requestMatchers("/api/users/register", "/api/users/login", "/api/users/check-availability").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/faculties/**", "/api/departments/**").permitAll()
+                .requestMatchers(HttpMethod.PATCH, "/api/departments/*/hod").hasAnyRole(ADMIN_ROLES)
+                .requestMatchers("/api/users/instructors/pending").hasAnyRole(ADMIN_ROLES)
+                .requestMatchers(HttpMethod.PATCH, "/api/users/*/approve").hasAnyRole(ADMIN_ROLES)
+                .requestMatchers(HttpMethod.DELETE, "/api/users/*/reject").hasAnyRole(ADMIN_ROLES)
+                .requestMatchers("/api/users/by-role/**").hasAnyRole(ADMIN_ROLES)
+                .requestMatchers(HttpMethod.GET, "/api/users").hasAnyRole(ADMIN_ROLES)
+                .requestMatchers(HttpMethod.GET, "/api/users/search").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/users/*").permitAll()
                 .anyRequest().authenticated()
             )

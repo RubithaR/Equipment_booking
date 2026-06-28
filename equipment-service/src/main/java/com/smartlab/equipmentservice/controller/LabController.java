@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/labs")
@@ -23,8 +24,10 @@ public class LabController {
     }
 
     @GetMapping
-    public ResponseEntity<List<LabResponse>> getAll() {
-        return ResponseEntity.ok(labService.getAll());
+    public ResponseEntity<List<LabResponse>> list(
+            @RequestParam(required = false) Long departmentId,
+            @RequestParam(required = false) Long instructorUserId) {
+        return ResponseEntity.ok(labService.list(departmentId, instructorUserId));
     }
 
     @GetMapping("/{id}")
@@ -32,30 +35,20 @@ public class LabController {
         return ResponseEntity.ok(labService.getById(id));
     }
 
+    @PutMapping("/{id}")
+    public ResponseEntity<LabResponse> update(@PathVariable Long id, @Valid @RequestBody LabRequest request) {
+        return ResponseEntity.ok(labService.update(id, request));
+    }
+
+    @PatchMapping("/{id}/instructor")
+    public ResponseEntity<LabResponse> assignInstructor(@PathVariable Long id,
+                                                       @RequestBody Map<String, Long> body) {
+        return ResponseEntity.ok(labService.assignInstructor(id, body.get("instructorUserId")));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         labService.delete(id);
         return ResponseEntity.noContent().build();
-    }
-
-    // Admin assigns an instructor to a lab
-    @PostMapping("/{labId}/instructors/{instructorId}")
-    public ResponseEntity<LabResponse> assignInstructor(@PathVariable Long labId,
-                                                        @PathVariable Long instructorId) {
-        return ResponseEntity.ok(labService.assignInstructor(labId, instructorId));
-    }
-
-    // Admin unassigns an instructor from a lab
-    @DeleteMapping("/{labId}/instructors/{instructorId}")
-    public ResponseEntity<Void> unassignInstructor(@PathVariable Long labId,
-                                                   @PathVariable Long instructorId) {
-        labService.unassignInstructor(labId, instructorId);
-        return ResponseEntity.noContent().build();
-    }
-
-    // Instructor uses this to populate "which labs can I add equipment to"
-    @GetMapping("/by-instructor/{instructorId}")
-    public ResponseEntity<List<LabResponse>> getLabsForInstructor(@PathVariable Long instructorId) {
-        return ResponseEntity.ok(labService.getLabsForInstructor(instructorId));
     }
 }

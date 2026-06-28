@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { equipmentApi, labApi, errMsg } from '../../api';
+import { itemApi, labApi, errMsg } from '../../api';
 import { getCurrentUser } from '../../auth';
+import { byId } from '../../utils/format';
 
 const CATEGORIES = [
   'Electronics',
@@ -13,9 +14,11 @@ const CATEGORIES = [
 ];
 
 const EMPTY = {
+  labId: '',
+  model: '',
   name: '',
   category: '',
-  location: '',
+  serialNumber: '',
   status: 'AVAILABLE',
   description: '',
   labId: '',
@@ -23,6 +26,7 @@ const EMPTY = {
 
 export default function AddEquipment() {
   const me = getCurrentUser();
+  const [labs, setLabs] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -30,27 +34,30 @@ export default function AddEquipment() {
   const [recent, setRecent] = useState([]);
   const [myLabs, setMyLabs] = useState([]);
 
+  const loadLabs = async () => {
+    try {
+      // Show only labs assigned to this instructor.
+      const { data } = await labApi.list({ instructorUserId: me?.id });
+      setLabs(data);
+      if (data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
+    } catch {
+      setLabs([]);
+    }
+  };
+
   const loadRecent = async () => {
     try {
-      const { data } = await equipmentApi.list();
-      const sorted = [...data].sort((a, b) => (b.id || 0) - (a.id || 0)).slice(0, 5);
+      const { data } = await itemApi.list();
+      const mine = data.filter((i) => labs.some((l) => l.id === i.labId));
+      const sorted = [...mine].sort((a, b) => (b.id || 0) - (a.id || 0)).slice(0, 5);
       setRecent(sorted);
     } catch {
       setRecent([]);
     }
   };
 
-  const loadMyLabs = async () => {
-    if (!me?.id) return;
-    try {
-      const { data } = await labApi.byInstructor(me.id);
-      setMyLabs(data || []);
-    } catch {
-      setMyLabs([]);
-    }
-  };
-
-  useEffect(() => { loadRecent(); loadMyLabs(); }, []);
+  useEffect(() => { loadLabs(); }, []);
+  useEffect(() => { loadRecent(); /* eslint-disable-next-line */ }, [labs]);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -58,19 +65,10 @@ export default function AddEquipment() {
     e.preventDefault();
     setError(''); setSuccess(''); setBusy(true);
     try {
-      if (!form.labId) {
-        setError('Please select a lab. You can only add equipment to labs you are assigned to.');
-        setBusy(false);
-        return;
-      }
-      const payload = {
-        ...form,
-        labId: Number(form.labId),
-        instructorId: me.id,
-      };
-      const { data } = await equipmentApi.create(payload);
-      setSuccess(`"${data.name}" added to ${data.labName || 'the catalogue'}. Students can now book it.`);
-      setForm(EMPTY);
+      const payload = { ...form, labId: Number(form.labId) };
+      const { data } = await itemApi.create(payload);
+      setSuccess(`"${data.name}" added. Students can now book it.`);
+      setForm({ ...EMPTY, labId: form.labId }); // keep lab selection
       loadRecent();
       setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
@@ -80,13 +78,15 @@ export default function AddEquipment() {
     }
   };
 
+  const labLookup = byId(labs);
+
   return (
     <div className="container add-eq-wrap">
       <div className="add-eq-head">
         <div>
-          <h1 className="page-title">Add Lab Equipment</h1>
+          <h1 className="page-title">Add Lab Item</h1>
           <p className="page-sub">
-            Register a new instrument in the SmartLab catalogue. Students can book it once its status
+            Register a new item in one of your labs. Students can book it once its status
             is <em>Available</em>.
           </p>
         </div>
@@ -95,6 +95,12 @@ export default function AddEquipment() {
           Instructor · Catalogue
         </div>
       </div>
+
+      {labs.length === 0 && (
+        <div className="alert alert-error">
+          You don't have any labs assigned yet. Ask your department admin to assign you to a lab before adding items.
+        </div>
+      )}
 
       <div className="add-eq-grid">
         <form className="add-eq-form" onSubmit={submit}>
@@ -105,15 +111,41 @@ export default function AddEquipment() {
             <div className="add-eq-section-head">
               <span className="add-eq-section-num">01</span>
               <div>
-                <h2>Identity</h2>
-                <p>What is this piece of equipment?</p>
+                <h2>Lab</h2>
+                <p>Which lab does this item live in?</p>
               </div>
             </div>
             <div className="field">
-              <label>Equipment Name <span className="req">*</span></label>
-              <input value={form.name} required onChange={set('name')}
-                     placeholder="e.g., Tektronix TBS1052B Oscilloscope" />
-              <span className="field-hint">Include make and model so students can identify it.</span>
+              <label>Lab <span className="req">*</span></label>
+              <select value={form.labId} required onChange={set('labId')} disabled={labs.length === 0}>
+                <option value="">— Select a lab —</option>
+                {labs.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}{l.location ? ` — ${l.location}` : ''}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="add-eq-section">
+            <div className="add-eq-section-head">
+              <span className="add-eq-section-num">02</span>
+              <div>
+                <h2>Identity</h2>
+                <p>What is this physical unit?</p>
+              </div>
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>Model <span className="req">*</span></label>
+                <input value={form.model} required onChange={set('model')}
+                       placeholder="Tektronix TBS1052B" />
+                <span className="field-hint">Make + model — students search by this.</span>
+              </div>
+              <div className="field">
+                <label>Display name <span className="req">*</span></label>
+                <input value={form.name} required onChange={set('name')}
+                       placeholder="Oscilloscope #1" />
+              </div>
             </div>
             <div className="field-row">
               <div className="field">
@@ -124,18 +156,10 @@ export default function AddEquipment() {
                 </select>
               </div>
               <div className="field">
-                <label>Lab <span className="req">*</span></label>
-                <select value={form.labId} required onChange={set('labId')}>
-                  <option value="">— Select one of your labs —</option>
-                  {myLabs.map((l) => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
-                <span className="field-hint">
-                  {myLabs.length === 0
-                    ? 'You are not assigned to any labs yet. Ask the admin.'
-                    : 'Only labs you are assigned to are listed.'}
-                </span>
+                <label>Serial number</label>
+                <input value={form.serialNumber} onChange={set('serialNumber')}
+                       placeholder="C012345" />
+                <span className="field-hint">Optional — useful for tracking the physical unit.</span>
               </div>
             </div>
             <div className="field">
@@ -148,7 +172,7 @@ export default function AddEquipment() {
 
           <div className="add-eq-section">
             <div className="add-eq-section-head">
-              <span className="add-eq-section-num">02</span>
+              <span className="add-eq-section-num">03</span>
               <div>
                 <h2>Availability</h2>
                 <p>Is this ready for students to book right now?</p>
@@ -174,7 +198,7 @@ export default function AddEquipment() {
 
           <div className="add-eq-section">
             <div className="add-eq-section-head">
-              <span className="add-eq-section-num">03</span>
+              <span className="add-eq-section-num">04</span>
               <div>
                 <h2>Description</h2>
                 <p>Specs, accessories, or safety notes (optional).</p>
@@ -183,17 +207,17 @@ export default function AddEquipment() {
             <div className="field">
               <label>Details</label>
               <textarea rows="4" value={form.description} onChange={set('description')}
-                        placeholder="e.g., 50 MHz, 2-channel. Comes with BNC probes. Handle with care — fragile CRT replacement." />
-              <span className="field-hint">Helps students understand what they are reserving.</span>
+                        placeholder="50 MHz, 2-channel. Comes with BNC probes." />
             </div>
           </div>
 
           <div className="add-eq-actions">
             <button type="button" className="btn-pill btn-pill-ghost"
-                    onClick={() => { setForm(EMPTY); setError(''); setSuccess(''); }}>
+                    onClick={() => { setForm({ ...EMPTY, labId: form.labId }); setError(''); setSuccess(''); }}>
               Reset form
             </button>
-            <button type="submit" className="btn-pill btn-pill-solid btn-pill-lg" disabled={busy}>
+            <button type="submit" className="btn-pill btn-pill-solid btn-pill-lg"
+                    disabled={busy || !form.labId}>
               {busy ? 'Saving…' : 'Add to Catalogue →'}
             </button>
           </div>
@@ -214,11 +238,14 @@ export default function AddEquipment() {
                 {recent.map((e) => {
                   const st = (e.status || 'AVAILABLE').toUpperCase();
                   const cls = st === 'AVAILABLE' ? 'ok' : st === 'IN_USE' ? 'busy' : 'warn';
+                  const lab = labLookup[e.labId];
                   return (
                     <li key={e.id} className="add-eq-recent-row">
                       <div>
                         <div className="add-eq-recent-name">{e.name}</div>
-                        <div className="add-eq-recent-meta">{e.category} · {e.location}</div>
+                        <div className="add-eq-recent-meta">
+                          {e.model} · {e.category}{lab ? ` · ${lab.name}` : ''}
+                        </div>
                       </div>
                       <span className={`eq-status eq-status-${cls}`}>
                         {st === 'IN_USE' ? 'In use' : st === 'MAINTENANCE' ? 'Maint.' : 'Available'}
@@ -228,16 +255,6 @@ export default function AddEquipment() {
                 })}
               </ul>
             )}
-          </div>
-
-          <div className="add-eq-tips">
-            <div className="add-eq-tips-title">Tips for a clean catalogue</div>
-            <ul>
-              <li>Use the make + model in the <strong>name</strong> — "Tektronix TBS1052B", not just "Oscilloscope".</li>
-              <li>Keep <strong>location</strong> specific: "Lab A-101" beats "Electronics lab".</li>
-              <li>Set status to <strong>Maintenance</strong> if it's broken — students won't be able to book it.</li>
-              <li>Description is public — no private notes or passwords.</li>
-            </ul>
           </div>
         </aside>
       </div>

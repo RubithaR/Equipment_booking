@@ -1,26 +1,32 @@
 import { useEffect, useState } from 'react';
-import { labApi, userApi, errMsg } from '../../api';
+import { labApi, departmentApi, userApi, errMsg } from '../../api';
+import { getCurrentUser } from '../../auth';
 
-export default function Labs() {
+const EMPTY = {
+  departmentId: '',
+  name: '',
+  location: '',
+  description: '',
+  instructorUserId: '',
+};
+
+export default function AdminLabs() {
+  const me = getCurrentUser();
+  const isMainAdmin = me?.role === 'MAIN_ADMIN';
+
   const [labs, setLabs] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [instructors, setInstructors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [msg, setMsg] = useState('');
-  const [newLabName, setNewLabName] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(null); // null | 'new' | lab object
 
   const load = async () => {
     setLoading(true);
-    setError('');
     try {
-      const [labsRes, instRes] = await Promise.all([
-        labApi.list(),
-        userApi.getByRole('INSTRUCTOR'),
-      ]);
-      setLabs(labsRes.data);
-      // Only show ACTIVE instructors (admin has already approved them)
-      setInstructors((instRes.data || []).filter(u => u.status === 'ACTIVE'));
+      const params = isMainAdmin ? {} : { departmentId: me.departmentId };
+      const { data } = await labApi.list(params);
+      setLabs(data);
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -28,137 +34,175 @@ export default function Labs() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    departmentApi.list().then((r) => setDepartments(r.data)).catch(() => setDepartments([]));
+    userApi.getByRole('INSTRUCTOR').then((r) => setInstructors(r.data || [])).catch(() => setInstructors([]));
+  }, []);
 
-  const createLab = async (e) => {
-    e.preventDefault();
-    if (!newLabName.trim()) return;
-    setCreating(true);
+  const save = async (form) => {
     try {
-      await labApi.create({ name: newLabName.trim() });
-      setMsg(`Created lab "${newLabName}".`);
-      setNewLabName('');
-      load();
-      setTimeout(() => setMsg(''), 4000);
-    } catch (err) {
-      alert(errMsg(err));
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const deleteLab = async (id, name) => {
-    if (!confirm(`Delete lab "${name}"? All instructor assignments will be removed.`)) return;
-    try {
-      await labApi.remove(id);
-      setMsg(`Deleted lab "${name}".`);
+      const payload = {
+        departmentId: Number(form.departmentId),
+        name: form.name,
+        location: form.location || null,
+        description: form.description || null,
+        instructorUserId: form.instructorUserId ? Number(form.instructorUserId) : null,
+      };
+      if (editing === 'new') {
+        await labApi.create(payload);
+      } else {
+        await labApi.update(editing.id, payload);
+      }
+      setEditing(null);
       load();
     } catch (err) {
       alert(errMsg(err));
     }
   };
 
-  const assign = async (labId, instructorId) => {
-    if (!instructorId) return;
+  const remove = async (lab) => {
+    if (!confirm(`Delete lab "${lab.name}"? Items in this lab must be moved or deleted first.`)) return;
     try {
-      await labApi.assignInstructor(labId, Number(instructorId));
+      await labApi.remove(lab.id);
       load();
     } catch (err) {
       alert(errMsg(err));
     }
   };
 
-  const unassign = async (labId, instructorId, name) => {
-    if (!confirm(`Remove ${name} from this lab?`)) return;
-    try {
-      await labApi.unassignInstructor(labId, instructorId);
-      load();
-    } catch (err) {
-      alert(errMsg(err));
-    }
+  const deptName = (id) => departments.find((d) => d.id === id)?.name || `Dept #${id}`;
+  const instructorName = (id) => {
+    if (!id) return '— unassigned —';
+    const u = instructors.find((u) => u.id === id);
+    return u ? u.fullName : `User #${id}`;
   };
 
   return (
     <div className="container">
-      <h1 className="page-title">Manage Labs</h1>
-      <p className="page-sub">Create labs and assign instructors. Each instructor can manage equipment for the labs they're assigned to.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <h1 className="page-title">Manage Labs</h1>
+          <p className="page-sub">
+            {isMainAdmin
+              ? 'Labs across all departments.'
+              : 'Labs in your department. Create labs and assign an instructor to each.'}
+          </p>
+        </div>
+        <button className="btn" onClick={() => setEditing('new')}>+ Add Lab</button>
+      </div>
 
       {error && <div className="alert alert-error">{error}</div>}
-      {msg && <div className="alert alert-success">{msg}</div>}
-
-      <form onSubmit={createLab} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 24 }}>
-        <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-          <label>New Lab Name</label>
-          <input value={newLabName}
-                 onChange={(e) => setNewLabName(e.target.value)}
-                 placeholder="Lab 234" required />
-        </div>
-        <button type="submit" className="btn-pill btn-pill-solid" disabled={creating}>
-          {creating ? 'Creating…' : '+ Create Lab'}
-        </button>
-      </form>
 
       {loading ? <div className="loading">Loading…</div> : (
         labs.length === 0 ? (
-          <div className="empty"><div className="empty-icon">🏗</div>No labs yet. Create one above.</div>
+          <div className="empty"><div className="empty-icon">🏛️</div>No labs yet. Click "Add Lab".</div>
         ) : (
-          <div style={{ display: 'grid', gap: 16 }}>
-            {labs.map((lab) => {
-              const assignedIds = new Set((lab.instructors || []).map(i => i.id));
-              const unassigned = instructors.filter(i => !assignedIds.has(i.id));
-              return (
-                <div key={lab.id} className="lab-card">
-                  <div className="lab-card-head">
-                    <div>
-                      <div className="lab-card-eyebrow">Lab #{lab.id}</div>
-                      <h3 className="lab-card-name">{lab.name}</h3>
-                    </div>
-                    <button className="btn btn-danger btn-sm" onClick={() => deleteLab(lab.id, lab.name)}>
-                      Delete Lab
-                    </button>
-                  </div>
-
-                  <div className="lab-card-section">
-                    <div className="lab-card-section-title">Assigned Instructors ({lab.instructors?.length || 0})</div>
-                    {(!lab.instructors || lab.instructors.length === 0) ? (
-                      <div className="lab-card-empty">No instructors assigned yet — they can't add equipment for this lab.</div>
-                    ) : (
-                      <div className="lab-instructor-list">
-                        {lab.instructors.map((i) => (
-                          <span key={i.id} className="lab-instructor-pill">
-                            {i.fullName}
-                            {i.department ? <span className="lab-instructor-dept"> · {i.department}</span> : null}
-                            <button className="lab-instructor-x"
-                                    title={`Unassign ${i.fullName}`}
-                                    onClick={() => unassign(lab.id, i.id, i.fullName)}>×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="lab-card-section">
-                    <div className="lab-card-section-title">Assign more</div>
-                    {unassigned.length === 0 ? (
-                      <div className="lab-card-empty">All active instructors are already assigned to this lab.</div>
-                    ) : (
-                      <select defaultValue=""
-                              onChange={(e) => { assign(lab.id, e.target.value); e.target.value = ''; }}>
-                        <option value="">— Pick an instructor to assign —</option>
-                        {unassigned.map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.fullName}{i.department ? ` (${i.department})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Name</th><th>Department</th><th>Location</th><th>Instructor</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {labs.map((l) => (
+                  <tr key={l.id}>
+                    <td>{l.id}</td>
+                    <td>{l.name}<div style={{ fontSize: 12, color: 'var(--muted)' }}>{l.description}</div></td>
+                    <td>{deptName(l.departmentId)}</td>
+                    <td>{l.location || '—'}</td>
+                    <td>{instructorName(l.instructorUserId)}</td>
+                    <td style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setEditing(l)}>Edit</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => remove(l)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )
       )}
+
+      {editing && (
+        <LabModal
+          initial={editing === 'new'
+            ? { ...EMPTY, departmentId: isMainAdmin ? '' : me.departmentId || '' }
+            : {
+                departmentId: editing.departmentId,
+                name: editing.name,
+                location: editing.location || '',
+                description: editing.description || '',
+                instructorUserId: editing.instructorUserId || '',
+              }}
+          isNew={editing === 'new'}
+          departments={isMainAdmin ? departments : departments.filter((d) => d.id === me.departmentId)}
+          instructors={instructors}
+          onClose={() => setEditing(null)}
+          onSave={save}
+        />
+      )}
+    </div>
+  );
+}
+
+function LabModal({ initial, isNew, departments, instructors, onClose, onSave }) {
+  const [form, setForm] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  // Filter instructors to those in the chosen department (when known).
+  const eligibleInstructors = form.departmentId
+    ? instructors.filter((u) => u.departmentId == form.departmentId && u.status === 'ACTIVE')
+    : instructors.filter((u) => u.status === 'ACTIVE');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    await onSave(form);
+    setBusy(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>{isNew ? 'Add Lab' : 'Edit Lab'}</h2>
+        <form onSubmit={submit}>
+          <div className="field">
+            <label>Department</label>
+            <select value={form.departmentId} required onChange={set('departmentId')}>
+              <option value="">— Select department —</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Lab name</label>
+            <input value={form.name} required onChange={set('name')} placeholder="Embedded Systems Lab" />
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Location</label>
+              <input value={form.location} onChange={set('location')} placeholder="Building A, Room 101" />
+            </div>
+            <div className="field">
+              <label>Instructor</label>
+              <select value={form.instructorUserId} onChange={set('instructorUserId')}>
+                <option value="">— Unassigned —</option>
+                {eligibleInstructors.map((u) => (
+                  <option key={u.id} value={u.id}>{u.fullName} ({u.email})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="field">
+            <label>Description</label>
+            <textarea rows="3" value={form.description} onChange={set('description')} />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

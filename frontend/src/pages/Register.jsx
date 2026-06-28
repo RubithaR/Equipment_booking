@@ -119,8 +119,8 @@ export default function Register() {
         setSuccess('Account created. Awaiting department admin approval — you will be notified. Redirecting to sign in…');
         setTimeout(() => nav('/login'), 3000);
       } else {
-        setSuccess('Account created. Redirecting to sign in…');
-        setTimeout(() => nav('/login'), 1500);
+        setSuccess('Account created. Awaiting your department instructor\'s approval — you will be notified. Redirecting to sign in…');
+        setTimeout(() => nav('/login'), 3000);
       }
     } catch (err) {
       setError(errMsg(err));

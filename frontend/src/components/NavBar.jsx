@@ -56,7 +56,8 @@ export default function NavBar() {
           {role === 'INSTRUCTOR' && (
             <>
               <NavLink to="/instructor/equipment/new">Add Equipment</NavLink>
-              <NavLink to="/instructor/pending">Pending</NavLink>
+              <NavLink to="/instructor/students-pending">Pending Students</NavLink>
+              <NavLink to="/instructor/pending">Pending Bookings</NavLink>
               <NavLink to="/instructor/all">All Bookings</NavLink>
               <NavLink to="/instructor/notifications">Notifications</NavLink>
             </>

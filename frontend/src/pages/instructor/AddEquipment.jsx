@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { itemApi, labApi, errMsg } from '../../api';
 import { getCurrentUser } from '../../auth';
 import { byId } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 const CATEGORIES = [
   'Electronics',
@@ -32,30 +33,30 @@ export default function AddEquipment() {
   const [success, setSuccess] = useState('');
   const [recent, setRecent] = useState([]);
 
-  const loadLabs = async () => {
-    try {
-      // Show only labs assigned to this instructor.
-      const { data } = await labApi.list({ instructorUserId: me?.id });
-      setLabs(data);
-      if (data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
-    } catch {
-      setLabs([]);
-    }
-  };
-
-  const loadRecent = async () => {
+  const loadRecent = async (isCancelled) => {
     try {
       const { data } = await itemApi.list();
+      if (isCancelled?.()) return;
       const mine = data.filter((i) => labs.some((l) => l.id === i.labId));
       const sorted = [...mine].sort((a, b) => (b.id || 0) - (a.id || 0)).slice(0, 5);
       setRecent(sorted);
     } catch {
-      setRecent([]);
+      if (!isCancelled?.()) setRecent([]);
     }
   };
 
-  useEffect(() => { loadLabs(); }, []);
-  useEffect(() => { loadRecent(); /* eslint-disable-next-line */ }, [labs]);
+  useAsyncEffect(async (isCancelled) => {
+    try {
+      const { data } = await labApi.list({ instructorUserId: me?.id });
+      if (isCancelled()) return;
+      setLabs(data);
+      if (data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
+    } catch {
+      if (!isCancelled()) setLabs([]);
+    }
+  }, []);
+
+  useAsyncEffect(loadRecent, [labs]);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 

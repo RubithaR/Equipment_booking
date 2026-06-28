@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { labApi, departmentApi, userApi, errMsg } from '../../api';
 import { getCurrentUser } from '../../auth';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 const EMPTY = {
   departmentId: '',
@@ -21,24 +22,28 @@ export default function AdminLabs() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // null | 'new' | lab object
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
       const params = isMainAdmin ? {} : { departmentId: me.departmentId };
-      const { data } = await labApi.list(params);
-      setLabs(data);
+      const [labsRes, deptsRes, instructorsRes] = await Promise.all([
+        labApi.list(params),
+        departmentApi.list().catch(() => ({ data: [] })),
+        userApi.getByRole('INSTRUCTOR').catch(() => ({ data: [] })),
+      ]);
+      if (isCancelled?.()) return;
+      setLabs(labsRes.data);
+      setDepartments(deptsRes.data);
+      setInstructors(instructorsRes.data || []);
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => {
-    load();
-    departmentApi.list().then((r) => setDepartments(r.data)).catch(() => setDepartments([]));
-    userApi.getByRole('INSTRUCTOR').then((r) => setInstructors(r.data || [])).catch(() => setInstructors([]));
-  }, []);
+  useAsyncEffect(load, []);
 
   const save = async (form) => {
     try {

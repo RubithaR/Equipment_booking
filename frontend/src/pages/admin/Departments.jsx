@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { departmentApi, userApi, errMsg } from '../../api';
 import { getCurrentUser } from '../../auth';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 export default function AdminDepartments() {
   const me = getCurrentUser();
@@ -13,15 +14,16 @@ export default function AdminDepartments() {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // department row currently being edited
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
-      const { data: depts } = await departmentApi.list();
-      const visible = isMainAdmin ? depts : depts.filter((d) => d.id === me.departmentId);
-      setDepartments(visible);
+      const [{ data: depts }, { data: hods }] = await Promise.all([
+        departmentApi.list(),
+        userApi.getByRole('HOD'),
+      ]);
+      if (isCancelled?.()) return;
 
-      // All HoDs across the system, grouped by department.
-      const { data: hods } = await userApi.getByRole('HOD');
+      const visible = isMainAdmin ? depts : depts.filter((d) => d.id === me.departmentId);
       const grouped = {};
       const nameMap = {};
       hods.forEach((h) => {
@@ -30,16 +32,18 @@ export default function AdminDepartments() {
         if (!grouped[h.departmentId]) grouped[h.departmentId] = [];
         grouped[h.departmentId].push(h);
       });
+      setDepartments(visible);
       setHodsByDept(grouped);
       setHodNameById(nameMap);
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useAsyncEffect(load, []);
 
   const setHod = async (deptId, hodUserId) => {
     try {

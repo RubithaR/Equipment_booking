@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { itemApi, labApi, errMsg } from '../../api';
 import Badge from '../../components/Badge';
 import { byId } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 export default function AdminEquipment() {
   const [items, setItems] = useState([]);
@@ -10,20 +11,22 @@ export default function AdminEquipment() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
       const [itemsRes, labsRes] = await Promise.all([itemApi.list(), labApi.list()]);
+      if (isCancelled?.()) return;
       setItems(itemsRes.data);
       setLabs(labsRes.data);
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useAsyncEffect(load, []);
 
   const labLookup = byId(labs);
 

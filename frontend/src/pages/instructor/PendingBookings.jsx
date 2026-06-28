@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { bookingApi, itemApi, labApi, userApi, departmentApi, errMsg } from '../../api';
 import { getCurrentUser } from '../../auth';
 import Badge from '../../components/Badge';
 import { byId, fmt, trunc } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 const ACTIONABLE = new Set(['SUBMITTED', 'INSTRUCTOR_REVIEWING']);
 const FINALISABLE = new Set(['SUPERVISOR_APPROVED']);
@@ -22,15 +23,17 @@ export default function PendingBookings() {
   const [error, setError] = useState('');
   const [modal, setModal] = useState(null);
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
-      const { data: bks } = await bookingApi.assignedToMe();
-      setBookings(bks);
-
-      const [{ data: items }, { data: labs }, { data: depts }] = await Promise.all([
-        itemApi.list(), labApi.list(), departmentApi.list(),
+      const [{ data: bks }, { data: items }, { data: labs }, { data: depts }] = await Promise.all([
+        bookingApi.assignedToMe(),
+        itemApi.list(),
+        labApi.list(),
+        departmentApi.list(),
       ]);
+      if (isCancelled?.()) return;
+      setBookings(bks);
       setItemMap(byId(items));
       setLabMap(byId(labs));
       setDepartmentMap(byId(depts));
@@ -47,16 +50,18 @@ export default function PendingBookings() {
           try { const { data } = await userApi.getById(id); vm[id] = data; } catch {}
         }),
       ]);
+      if (isCancelled?.()) return;
       setStudentMap(sm);
       setSupervisorMap(vm);
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useAsyncEffect(load, []);
 
   const onAction = async (action, booking, line, body) => {
     try {
@@ -294,28 +299,28 @@ function DelegateModal({ booking, line, suggestedDeptHodUserId, onClose, onSubmi
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
 
-  useEffect(() => {
+  useAsyncEffect(async (isCancelled) => {
     if (!suggestedDeptHodUserId) return;
-    (async () => {
-      try {
-        const { data } = await userApi.getById(suggestedDeptHodUserId);
-        if (data?.status === 'ACTIVE') setPicked(data);
-      } catch {}
-    })();
+    try {
+      const { data } = await userApi.getById(suggestedDeptHodUserId);
+      if (!isCancelled() && data?.status === 'ACTIVE') setPicked(data);
+    } catch {}
   }, [suggestedDeptHodUserId]);
 
-  useEffect(() => {
+  useAsyncEffect(async (isCancelled) => {
     const term = q.trim();
     if (term.length < 2) { setResults([]); return; }
-    const t = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const { data } = await userApi.search({ q: term, roles: 'HOD,LECTURER', limit: 15 });
-        setResults(data);
-      } catch { setResults([]); }
-      finally { setSearching(false); }
-    }, 250);
-    return () => clearTimeout(t);
+    await new Promise((r) => setTimeout(r, 250));
+    if (isCancelled()) return;
+    setSearching(true);
+    try {
+      const { data } = await userApi.search({ q: term, roles: 'HOD,LECTURER', limit: 15 });
+      if (!isCancelled()) setResults(data);
+    } catch {
+      if (!isCancelled()) setResults([]);
+    } finally {
+      if (!isCancelled()) setSearching(false);
+    }
   }, [q]);
 
   const submit = async (e) => {

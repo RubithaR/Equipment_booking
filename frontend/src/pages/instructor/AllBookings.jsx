@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { bookingApi, userApi, errMsg } from '../../api';
 import { isAdmin } from '../../auth';
 import Badge from '../../components/Badge';
 import { fmt } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 const STATES = [
   'ALL',
@@ -21,12 +22,12 @@ export default function AllBookings() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('ALL');
 
-  const load = async () => {
-    setLoading(true);
+  useAsyncEffect(async (isCancelled) => {
     try {
       const { data: bks } = admin
         ? await bookingApi.list()
         : await bookingApi.assignedToMe();
+      if (isCancelled()) return;
       setBookings(bks);
 
       const studentIds = [...new Set(bks.map((b) => b.studentUserId))];
@@ -34,15 +35,13 @@ export default function AllBookings() {
       await Promise.all(studentIds.map(async (id) => {
         try { const { data } = await userApi.getById(id); sm[id] = data; } catch {}
       }));
-      setStudentMap(sm);
+      if (!isCancelled()) setStudentMap(sm);
     } catch (err) {
-      setError(errMsg(err));
+      if (!isCancelled()) setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled()) setLoading(false);
     }
-  };
-
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  }, []);
 
   const visible = bookings
     .filter((b) => filter === 'ALL' || b.state === filter)

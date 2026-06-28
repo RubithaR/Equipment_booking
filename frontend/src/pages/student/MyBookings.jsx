@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { bookingApi, itemApi, labApi, errMsg } from '../../api';
 import Badge from '../../components/Badge';
 import { byId, fmt } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 const ACTIVE_UMBRELLA = new Set([
   'SUBMITTED', 'INSTRUCTOR_REVIEWING', 'AWAITING_SUPERVISOR',
@@ -22,27 +23,31 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
       const [{ data: bks }, { data: items }, { data: labs }] = await Promise.all([
         bookingApi.mine(), itemApi.list(), labApi.list(),
       ]);
+      if (isCancelled?.()) return;
       setBookings(bks);
       setItemMap(byId(items));
       setLabMap(byId(labs));
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
+  useAsyncEffect(load, []);
+
   useEffect(() => {
-    load();
-    if (flash) setTimeout(() => setFlash(''), 6000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(''), 6000);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   const cancel = async (id) => {
     if (!confirm("Cancel this booking? Items already collected can't be cancelled.")) return;

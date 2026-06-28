@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { bookingApi, itemApi, labApi, userApi, errMsg } from '../../api';
 import { getCurrentUser } from '../../auth';
 import Badge from '../../components/Badge';
 import { byId, fmt, trunc } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 export default function SupervisorQueue() {
   const me = getCurrentUser();
@@ -14,15 +15,16 @@ export default function SupervisorQueue() {
   const [error, setError] = useState('');
   const [reviewing, setReviewing] = useState(null);     // { booking, line, action }
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
-      const { data: bks } = await bookingApi.awaitingMySupervision();
-      setBookings(bks);
-
-      const [{ data: items }, { data: labs }] = await Promise.all([
-        itemApi.list(), labApi.list(),
+      const [{ data: bks }, { data: items }, { data: labs }] = await Promise.all([
+        bookingApi.awaitingMySupervision(),
+        itemApi.list(),
+        labApi.list(),
       ]);
+      if (isCancelled?.()) return;
+      setBookings(bks);
       setItemMap(byId(items));
       setLabMap(byId(labs));
 
@@ -31,15 +33,16 @@ export default function SupervisorQueue() {
       await Promise.all(studentIds.map(async (id) => {
         try { const { data } = await userApi.getById(id); sm[id] = data; } catch {}
       }));
-      setStudentMap(sm);
+      if (!isCancelled?.()) setStudentMap(sm);
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useAsyncEffect(load, []);
 
   const submit = async (note) => {
     const { booking, line, action } = reviewing;

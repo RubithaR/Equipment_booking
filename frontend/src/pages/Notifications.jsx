@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { notificationApi, errMsg } from '../api';
 import { getCurrentUser } from '../auth';
+import { useAsyncEffect } from '../hooks/useAsyncEffect';
 
 export default function Notifications() {
   const me = getCurrentUser();
@@ -8,24 +9,25 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (isCancelled) => {
     try {
       const { data } = await notificationApi.byUser(me.id);
+      if (isCancelled?.()) return;
       setItems(data);
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useAsyncEffect(load, []);
 
   const markRead = async (id) => {
     try {
       await notificationApi.markRead(id);
-      load();
+      await load();
     } catch (err) {
       alert(errMsg(err));
     }

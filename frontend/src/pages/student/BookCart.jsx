@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { bookingApi, errMsg, labApi, userApi } from '../../api';
 import { getCurrentUser } from '../../auth';
 import { clearCart, getCart, removeFromCart, subscribeCart } from '../../cart';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 export default function BookCart() {
   const me = getCurrentUser();
@@ -24,22 +25,25 @@ export default function BookCart() {
 
   useEffect(() => subscribeCart(setCart), []);
 
-  useEffect(() => {
+  useAsyncEffect(async (isCancelled) => {
     const labIds = [...new Set(cart.map((c) => c.labId))];
-    if (labIds.length === 0) { setLabMap({}); setInstructorMap({}); return; }
-    (async () => {
-      const lm = {};
-      await Promise.all(labIds.map(async (id) => {
-        try { const { data } = await labApi.get(id); lm[id] = data; } catch {}
-      }));
-      setLabMap(lm);
-      const insIds = [...new Set(Object.values(lm).map((l) => l?.instructorUserId).filter(Boolean))];
-      const im = {};
-      await Promise.all(insIds.map(async (id) => {
-        try { const { data } = await userApi.getById(id); im[id] = data; } catch {}
-      }));
-      setInstructorMap(im);
-    })();
+    if (labIds.length === 0) {
+      setLabMap({});
+      setInstructorMap({});
+      return;
+    }
+    const lm = {};
+    await Promise.all(labIds.map(async (id) => {
+      try { const { data } = await labApi.get(id); lm[id] = data; } catch {}
+    }));
+    if (isCancelled()) return;
+    setLabMap(lm);
+    const insIds = [...new Set(Object.values(lm).map((l) => l?.instructorUserId).filter(Boolean))];
+    const im = {};
+    await Promise.all(insIds.map(async (id) => {
+      try { const { data } = await userApi.getById(id); im[id] = data; } catch {}
+    }));
+    if (!isCancelled()) setInstructorMap(im);
   }, [cart]);
 
   // Group lines by lab so the form makes the per-instructor approval explicit.

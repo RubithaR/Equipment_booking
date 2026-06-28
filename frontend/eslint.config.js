@@ -24,6 +24,8 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Per-id lookup loops swallow individual failures and fall back to defaults — empty catch is the intent.
+      'no-empty': ['error', { allowEmptyCatch: true }],
     },
   },
 ])

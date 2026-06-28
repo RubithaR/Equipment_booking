@@ -20,9 +20,11 @@ public class UserRequest {
     private String fullName;
 
     @NotBlank(message = "Role is required")
-    private String role; // STUDENT or INSTRUCTOR (admin not registerable)
+    private String role; // STUDENT or INSTRUCTOR (other roles created by admin tools)
 
-    private String department;
+    private Long facultyId;
+    private Long departmentId;
+
     private String phoneNumber;
 
     // Student-only fields (ignored for instructor)

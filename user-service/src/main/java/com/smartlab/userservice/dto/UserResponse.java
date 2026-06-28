@@ -14,7 +14,8 @@ public class UserResponse {
     private String fullName;
     private String role;
     private String status;
-    private String department;
+    private Long facultyId;
+    private Long departmentId;
     private String phoneNumber;
     private String enNumber;
     private String indexNumber;
@@ -28,7 +29,8 @@ public class UserResponse {
                 u.getFullName(),
                 u.getRole(),
                 u.getStatus(),
-                u.getDepartment(),
+                u.getFacultyId(),
+                u.getDepartmentId(),
                 u.getPhoneNumber(),
                 u.getEnNumber(),
                 u.getIndexNumber(),

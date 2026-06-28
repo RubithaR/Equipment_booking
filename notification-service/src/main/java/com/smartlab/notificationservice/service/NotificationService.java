@@ -1,9 +1,9 @@
 package com.smartlab.notificationservice.service;
 
-import com.smartlab.notificationservice.dto.NotificationRequest;
+import com.smartlab.notificationclient.NotificationDispatchRequest;
 import com.smartlab.notificationservice.entity.Notification;
-import com.smartlab.notificationservice.exception.NotFoundException;
 import com.smartlab.notificationservice.repository.NotificationRepository;
+import com.smartlab.security.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -15,13 +15,15 @@ import java.util.List;
 public class NotificationService {
 
     private final NotificationRepository repository;
+    private final MessageRenderer renderer;
 
-    public Notification create(NotificationRequest request) {
+    public Notification dispatch(NotificationDispatchRequest request) {
+        MessageRenderer.Rendered rendered = renderer.render(request);
         Notification n = new Notification();
         n.setUserId(request.getUserId());
-        n.setTitle(request.getTitle());
-        n.setMessage(request.getMessage());
-        n.setType(request.getType());
+        n.setTitle(rendered.title());
+        n.setMessage(rendered.message());
+        n.setType(request.getEventType());
         n.setRead(false);
         n.setCreatedAt(LocalDateTime.now());
         return repository.save(n);

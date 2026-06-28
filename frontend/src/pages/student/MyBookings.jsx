@@ -1,96 +1,78 @@
 import { useEffect, useState } from 'react';
-import { bookingApi, equipmentApi, errMsg } from '../../api';
-import { getCurrentUser } from '../../auth';
+import { useLocation } from 'react-router-dom';
+import { bookingApi, itemApi, labApi, errMsg } from '../../api';
 import Badge from '../../components/Badge';
+import { byId, fmt } from '../../utils/format';
+import { useAsyncEffect } from '../../hooks/useAsyncEffect';
+
+const ACTIVE_UMBRELLA = new Set([
+  'SUBMITTED', 'INSTRUCTOR_REVIEWING', 'AWAITING_SUPERVISOR',
+  'SUPERVISOR_APPROVED', 'READY_FOR_COLLECTION', 'COLLECTED', 'OVERDUE',
+]);
+
+const TERMINAL_LINE = new Set([
+  'INSTRUCTOR_REJECTED', 'SUPERVISOR_DECLINED', 'RETURNED', 'CANCELLED',
+]);
 
 export default function MyBookings() {
-  const me = getCurrentUser();
+  const location = useLocation();
+  const [flash, setFlash] = useState(location.state?.flash || '');
   const [bookings, setBookings] = useState([]);
-  const [equipMap, setEquipMap] = useState({});
+  const [itemMap, setItemMap] = useState({});
+  const [labMap, setLabMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = async () => {
+  const load = async (isCancelled) => {
     setLoading(true);
     try {
-      const [{ data: bks }, { data: equips }] = await Promise.all([
-        bookingApi.byUser(me.id),
-        equipmentApi.list(),
+      const [{ data: bks }, { data: items }, { data: labs }] = await Promise.all([
+        bookingApi.mine(), itemApi.list(), labApi.list(),
       ]);
+      if (isCancelled?.()) return;
       setBookings(bks);
-      const m = {};
-      equips.forEach((e) => { m[e.id] = e; });
-      setEquipMap(m);
+      setItemMap(byId(items));
+      setLabMap(byId(labs));
     } catch (err) {
+      if (isCancelled?.()) return;
       setError(errMsg(err));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useAsyncEffect(load, []);
+
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(''), 6000);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   const cancel = async (id) => {
-    if (!confirm('Cancel this booking?')) return;
-    try {
-      await bookingApi.cancel(id);
-      load();
-    } catch (err) {
-      alert(errMsg(err));
-    }
+    if (!confirm("Cancel this booking? Items already collected can't be cancelled.")) return;
+    try { await bookingApi.cancel(id); load(); }
+    catch (err) { alert(errMsg(err)); }
   };
 
   return (
     <div className="container">
       <h1 className="page-title">My Bookings</h1>
-      <p className="page-sub">Track your equipment booking requests and their status.</p>
+      <p className="page-sub">Each booking can include multiple items — every line tracks its own approval and pickup state.</p>
 
+      {flash && <div className="alert alert-success">{flash}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
       {loading ? <div className="loading">Loading…</div> : (
         bookings.length === 0 ? (
           <div className="empty"><div className="empty-icon">📅</div>No bookings yet. Browse equipment to make your first booking.</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Equipment</th>
-                  <th>Start</th>
-                  <th>End</th>
-                  <th>Purpose</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bookings.sort((a, b) => b.id - a.id).map((b) => {
-                  const eq = equipMap[b.equipmentId];
-                  const canCancel = b.status === 'PENDING_APPROVAL' || b.status === 'CONFIRMED';
-                  return (
-                    <tr key={b.id}>
-                      <td>{b.id}</td>
-                      <td>{eq ? eq.name : `Equipment #${b.equipmentId}`}</td>
-                      <td>{fmt(b.startTime)}</td>
-                      <td>{fmt(b.endTime)}</td>
-                      <td>{b.purpose || '—'}</td>
-                      <td><Badge value={b.status} /></td>
-                      <td>
-                        {canCancel && (
-                          <button className="btn btn-danger btn-sm" onClick={() => cancel(b.id)}>Cancel</button>
-                        )}
-                        {b.reviewNote && (
-                          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                            Note: {b.reviewNote}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {bookings.map((b) => (
+              <BookingCard key={b.id} booking={b}
+                           itemMap={itemMap} labMap={labMap}
+                           onCancel={() => cancel(b.id)} />
+            ))}
           </div>
         )
       )}
@@ -98,7 +80,59 @@ export default function MyBookings() {
   );
 }
 
-function fmt(dt) {
-  if (!dt) return '—';
-  return new Date(dt).toLocaleString();
+function BookingCard({ booking, itemMap, labMap, onCancel }) {
+  const canCancel = ACTIVE_UMBRELLA.has(booking.state)
+                    && booking.items.some((it) => !TERMINAL_LINE.has(it.state)
+                                                  && it.state !== 'COLLECTED'
+                                                  && it.state !== 'OVERDUE');
+  return (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>Booking #{booking.id}</div>
+          <h3 style={{ margin: '4px 0' }}>{booking.projectName}</h3>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+            {fmt(booking.startDate)} → {fmt(booking.returnDate)}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Badge value={booking.state} />
+          {canCancel && (
+            <button className="btn btn-danger btn-sm" onClick={onCancel}>Cancel</button>
+          )}
+        </div>
+      </div>
+
+      <div className="table-wrap" style={{ marginTop: 12 }}>
+        <table>
+          <thead>
+            <tr><th>Item</th><th>Lab</th><th>State</th><th>Pickup</th></tr>
+          </thead>
+          <tbody>
+            {booking.items.map((line) => {
+              const it = itemMap[line.itemId];
+              const lb = labMap[line.labId];
+              return (
+                <tr key={line.id}>
+                  <td>
+                    {it ? it.name : `Item #${line.itemId}`}
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{it?.model}</div>
+                  </td>
+                  <td>{lb ? lb.name : `Lab #${line.labId}`}</td>
+                  <td><Badge value={line.state} /></td>
+                  <td>
+                    {line.pickupAt ? fmt(line.pickupAt) : '—'}
+                    {line.pickupNote && (
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>{line.pickupNote}</div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
+

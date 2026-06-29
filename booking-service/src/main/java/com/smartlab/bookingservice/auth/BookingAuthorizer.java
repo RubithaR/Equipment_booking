@@ -32,6 +32,8 @@ public class BookingAuthorizer {
         if (actor.userId().equals(booking.getStudentUserId())) return;
         for (BookingItem line : lines) {
             if (actor.userId().equals(line.getInstructorUserId())) return;
+            if (line.getAssignedHodUserId() != null
+                    && actor.userId().equals(line.getAssignedHodUserId())) return;
             if (line.getAssignedSupervisorUserId() != null
                     && actor.userId().equals(line.getAssignedSupervisorUserId())) return;
         }
@@ -59,13 +61,13 @@ public class BookingAuthorizer {
                     throw new AuthorizationException("This line belongs to a different instructor");
                 }
             }
-            case SUPERVISOR_ASSIGNED -> {
+            case HOD_ASSIGNED -> {
                 if (!actor.hasAnyRole(Roles.HOD, Roles.LECTURER)) {
-                    throw new AuthorizationException("Only HoDs and Lecturers can take this action");
+                    throw new AuthorizationException("Only HoDs can take this action");
                 }
-                if (line.getAssignedSupervisorUserId() == null
-                        || !actor.userId().equals(line.getAssignedSupervisorUserId())) {
-                    throw new AuthorizationException("You are not the assigned supervisor for this line");
+                if (line.getAssignedHodUserId() == null
+                        || !actor.userId().equals(line.getAssignedHodUserId())) {
+                    throw new AuthorizationException("You are not the assigned HoD for this line");
                 }
             }
             case STUDENT_OWNER -> {

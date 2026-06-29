@@ -13,6 +13,7 @@ public class ItemDto {
     private String category;
     private String serialNumber;
     private String status;
+    private String usageType;
     private String description;
     private String conditionNote;
 }

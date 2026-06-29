@@ -1,11 +1,13 @@
 package com.smartlab.bookingservice.service;
 
 import com.smartlab.bookingservice.auth.BookingAuthorizer;
+import com.smartlab.bookingservice.client.DepartmentClient;
 import com.smartlab.bookingservice.client.ItemClient;
 import com.smartlab.bookingservice.client.LabClient;
 import com.smartlab.bookingservice.client.UserClient;
 import com.smartlab.bookingservice.dto.BookingRequest;
 import com.smartlab.bookingservice.dto.BookingResponse;
+import com.smartlab.bookingservice.dto.DepartmentApprovalChain;
 import com.smartlab.bookingservice.dto.ItemDto;
 import com.smartlab.bookingservice.dto.LabDto;
 import com.smartlab.bookingservice.dto.UserDto;
@@ -58,6 +60,7 @@ class BookingServiceCreateTest {
     @Mock UserClient                  userClient;
     @Mock ItemClient                  itemClient;
     @Mock LabClient                   labClient;
+    @Mock DepartmentClient            departmentClient;
     @Mock TransitionEngine            engine;
 
     InMemoryNotifier<NotificationEvent> notifier = new InMemoryNotifier<>();
@@ -66,6 +69,7 @@ class BookingServiceCreateTest {
 
     static final Long STUDENT_ID    = 100L;
     static final Long INSTRUCTOR_ID = 200L;
+    static final Long HOD_ID        = 300L;
     static final Long DEPT_ID       = 5L;
     static final Long ITEM_ID       = 20L;
     static final Long LAB_ID        = 30L;
@@ -73,7 +77,7 @@ class BookingServiceCreateTest {
     @BeforeEach
     void setUp() {
         service = new BookingService(bookingRepository, itemRepository, eventRepository,
-                attachmentRepository, userClient, itemClient, labClient,
+                attachmentRepository, userClient, itemClient, labClient, departmentClient,
                 notifier, engine, authorizer);
         notifier.clear();
         setActor(new UserContext(STUDENT_ID, "student@uni.com", Roles.STUDENT, null, DEPT_ID));
@@ -119,9 +123,16 @@ class BookingServiceCreateTest {
         student.setId(STUDENT_ID);
         student.setFullName("Alice");
 
+        UserDto hod = new UserDto();
+        hod.setId(HOD_ID);
+        hod.setFullName("Dr HoD");
+        DepartmentApprovalChain chain = new DepartmentApprovalChain();
+        chain.setHod(hod);
+
         lenient().when(itemClient.getItemById(ITEM_ID)).thenReturn(item);
         lenient().when(labClient.getLabById(LAB_ID)).thenReturn(lab);
         lenient().when(userClient.getUserById(STUDENT_ID)).thenReturn(student);
+        lenient().when(departmentClient.getApprovalChain(DEPT_ID)).thenReturn(chain);
         lenient().when(itemRepository.findConflicts(any(), any(), any())).thenReturn(List.of());
         lenient().when(bookingRepository.save(any())).thenAnswer(inv -> {
             Booking b = inv.getArgument(0);
@@ -139,20 +150,35 @@ class BookingServiceCreateTest {
     // ===== Happy path =====
 
     @Test
-    void create_validRequest_persistsAndDispatchesTwoEvents() {
+    void create_validRequest_persistsAndRoutesToHod() {
         stubHappyPath();
 
         BookingResponse response = service.create(validRequest());
 
         assertThat(response).isNotNull();
+        assertThat(response.getState()).isEqualTo(BookingState.AWAITING_HOD);
         assertThat(notifier.published()).hasSize(2);
         assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.SubmittedAckToStudent.class);
-        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.SubmittedDigestToInstructor.class);
+        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.HodReviewNeeded.class);
 
-        NotificationEvent.SubmittedDigestToInstructor digest =
-                (NotificationEvent.SubmittedDigestToInstructor) notifier.published().get(1);
-        assertThat(digest.instructorUserId()).isEqualTo(INSTRUCTOR_ID);
-        assertThat(digest.studentFullName()).isEqualTo("Alice");
+        NotificationEvent.HodReviewNeeded review =
+                (NotificationEvent.HodReviewNeeded) notifier.published().get(1);
+        assertThat(review.hodUserId()).isEqualTo(HOD_ID);
+        assertThat(review.studentFullName()).isEqualTo("Alice");
+    }
+
+    @Test
+    void create_noHodConfigured_routesStraightToInstructor() {
+        stubHappyPath();
+        when(departmentClient.getApprovalChain(DEPT_ID)).thenReturn(new DepartmentApprovalChain());
+
+        BookingResponse response = service.create(validRequest());
+
+        assertThat(response.getState()).isEqualTo(BookingState.SUBMITTED);
+        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.HodApprovedToInstructor.class);
+        NotificationEvent.HodApprovedToInstructor toInstructor =
+                (NotificationEvent.HodApprovedToInstructor) notifier.published().get(1);
+        assertThat(toInstructor.instructorUserId()).isEqualTo(INSTRUCTOR_ID);
     }
 
     // ===== Authorization =====
@@ -295,12 +321,12 @@ class BookingServiceCreateTest {
     // ===== Booking persistence =====
 
     @Test
-    void create_savedBookingHasSubmittedState() {
+    void create_dispatchesAckToStudent() {
         stubHappyPath();
 
         service.create(validRequest());
 
-        // Verify the booking was saved as SUBMITTED — captured indirectly via the dispatched ack event.
+        // The student always gets a submission acknowledgement, captured via the dispatched ack event.
         NotificationEvent.SubmittedAckToStudent ack =
                 (NotificationEvent.SubmittedAckToStudent) notifier.published().get(0);
         assertThat(ack.studentUserId()).isEqualTo(STUDENT_ID);

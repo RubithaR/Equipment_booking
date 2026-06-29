@@ -19,9 +19,10 @@ export default function AdminOverview() {
           bookingApi.list(),
         ]);
         const ACTIVE = new Set([
-          'SUBMITTED', 'INSTRUCTOR_REVIEWING', 'AWAITING_SUPERVISOR',
-          'SUPERVISOR_APPROVED', 'READY_FOR_COLLECTION', 'COLLECTED',
+          'AWAITING_HOD', 'SUBMITTED', 'INSTRUCTOR_REVIEWING',
+          'READY_FOR_COLLECTION', 'LAB_CONFIRMED', 'COLLECTED', 'OVERDUE',
         ]);
+        const PENDING = new Set(['AWAITING_HOD', 'SUBMITTED', 'INSTRUCTOR_REVIEWING']);
         setStats({
           students: students.data.length,
           instructors: instructors.data.filter((i) => i.status === 'ACTIVE').length,
@@ -29,8 +30,7 @@ export default function AdminOverview() {
           labs: labs.data.length,
           items: items.data.length,
           bookings: bookings.data.length,
-          pendingBookings: bookings.data.filter((b) =>
-            b.state === 'SUBMITTED' || b.state === 'INSTRUCTOR_REVIEWING').length,
+          pendingBookings: bookings.data.filter((b) => PENDING.has(b.state)).length,
           activeBookings: bookings.data.filter((b) => ACTIVE.has(b.state)).length,
         });
       } catch (err) {

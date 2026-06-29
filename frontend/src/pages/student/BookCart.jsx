@@ -12,6 +12,7 @@ export default function BookCart() {
   const [cart, setCart] = useState(getCart());
   const [labMap, setLabMap] = useState({});                  // labId -> { name, location, instructorUserId }
   const [instructorMap, setInstructorMap] = useState({});    // userId -> UserResponse
+  const [useTimes, setUseTimes] = useState({});              // itemId -> requested lab-use time (LAB_ONLY only)
 
   // Form fields shared across the whole booking.
   const [projectName, setProjectName] = useState('');
@@ -45,6 +46,8 @@ export default function BookCart() {
     }));
     if (!isCancelled()) setInstructorMap(im);
   }, [cart]);
+
+  const isLabOnly = (line) => (line.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
 
   // Group lines by lab so the form makes the per-instructor approval explicit.
   const groupedByLab = cart.reduce((acc, line) => {
@@ -87,6 +90,12 @@ export default function BookCart() {
       setError(`Lab ${labMap[labId]?.name || `#${labId}`} has no instructor assigned — remove its items.`);
       return;
     }
+    // Lab-only items need the student to propose a lab-use time.
+    const missingTime = cart.find((c) => isLabOnly(c) && !useTimes[c.itemId]);
+    if (missingTime) {
+      setError(`Pick a preferred lab-use time for "${missingTime.name}" (it's lab-use only).`);
+      return;
+    }
 
     const cleanAttachments = attachments
       .filter((a) => a.fileUrl?.trim() && a.fileName?.trim())
@@ -95,7 +104,11 @@ export default function BookCart() {
     setBusy(true);
     try {
       const { data } = await bookingApi.create({
-        items: cart.map((c) => ({ itemId: c.itemId, labId: c.labId })),
+        items: cart.map((c) => ({
+          itemId: c.itemId,
+          labId: c.labId,
+          requestedUseTime: isLabOnly(c) ? (useTimes[c.itemId] || null) : null,
+        })),
         projectName,
         purpose,
         startDate,
@@ -233,16 +246,28 @@ export default function BookCart() {
                     </div>
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                       {lines.map((l) => (
-                        <li key={l.itemId}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-                          <div style={{ flex: 1 }}>
-                            <div>{l.name}</div>
-                            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{l.model}</div>
+                        <li key={l.itemId} style={{ padding: '4px 0' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ flex: 1 }}>
+                              <div>{l.name}
+                                {' '}<span className={`eq-usage ${isLabOnly(l) ? 'eq-usage-lab' : 'eq-usage-borrow'}`}>
+                                  {isLabOnly(l) ? 'Lab only' : 'Borrowable'}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{l.model}</div>
+                            </div>
+                            <button type="button" className="btn btn-secondary btn-sm"
+                                    onClick={() => removeFromCart(l.itemId)}>
+                              Remove
+                            </button>
                           </div>
-                          <button type="button" className="btn btn-secondary btn-sm"
-                                  onClick={() => removeFromCart(l.itemId)}>
-                            Remove
-                          </button>
+                          {isLabOnly(l) && (
+                            <div className="field" style={{ marginTop: 6 }}>
+                              <label style={{ fontSize: 12 }}>Preferred lab-use time <span className="req">*</span></label>
+                              <input type="datetime-local" value={useTimes[l.itemId] || ''}
+                                     onChange={(e) => setUseTimes((m) => ({ ...m, [l.itemId]: e.target.value }))} />
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -254,8 +279,9 @@ export default function BookCart() {
             <div className="add-eq-tips">
               <div className="add-eq-tips-title">How approvals work</div>
               <ul>
-                <li>Each <strong>lab</strong> in your cart sends one notification to its instructor with all your items in that lab.</li>
-                <li>Instructors can <strong>approve directly</strong> or <strong>forward to a supervisor</strong> per item.</li>
+                <li>Your request goes to your <strong>Head of Department</strong> first for approval.</li>
+                <li>Once the HoD approves, the lab <strong>instructor</strong> gives the final approval.</li>
+                <li><strong>Borrowable</strong> items get a pickup time; <strong>lab-only</strong> items get a confirmed in-lab time.</li>
                 <li>You'll see each line's progress in <em>My Bookings</em>.</li>
               </ul>
             </div>

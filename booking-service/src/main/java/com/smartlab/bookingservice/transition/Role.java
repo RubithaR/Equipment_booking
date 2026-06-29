@@ -5,8 +5,8 @@ package com.smartlab.bookingservice.transition;
  * checks by the engine; the Transition records just declare the slot.
  */
 public enum Role {
-    INSTRUCTOR_OWNER,    // user is INSTRUCTOR and is the line's instructorUserId
-    SUPERVISOR_ASSIGNED, // user is HOD or LECTURER and is the line's assignedSupervisorUserId
-    STUDENT_OWNER,       // user is STUDENT and is the booking's studentUserId
-    SYSTEM               // cron / internal
+    INSTRUCTOR_OWNER, // user is INSTRUCTOR and is the line's instructorUserId
+    HOD_ASSIGNED,     // user is HOD (or LECTURER) and is the line's assignedHodUserId
+    STUDENT_OWNER,    // user is STUDENT and is the booking's studentUserId
+    SYSTEM            // cron / internal
 }

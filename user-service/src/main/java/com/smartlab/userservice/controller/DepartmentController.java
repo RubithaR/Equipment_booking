@@ -1,6 +1,8 @@
 package com.smartlab.userservice.controller;
 
+import com.smartlab.userservice.dto.DepartmentApprovalChain;
 import com.smartlab.userservice.dto.DepartmentResponse;
+import com.smartlab.userservice.dto.UserResponse;
 import com.smartlab.userservice.entity.Department;
 import com.smartlab.security.Roles;
 import com.smartlab.userservice.entity.User;
@@ -36,6 +38,33 @@ public class DepartmentController {
     @GetMapping("/{id}")
     public ResponseEntity<DepartmentResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(DepartmentResponse.from(getOrThrow(id)));
+    }
+
+    /**
+     * The department's approvers used by the booking flow. Today the booking flow
+     * routes a request to the department HoD (stage 1) before the lab instructor
+     * (stage 2). {@code hod} may be null when the department has no active HoD —
+     * the booking service then skips the HoD stage. Resolves the pinned
+     * {@code hodUserId} first, then falls back to any active HoD in the department.
+     */
+    @GetMapping("/{id}/approval-chain")
+    public ResponseEntity<DepartmentApprovalChain> approvalChain(@PathVariable Long id) {
+        Department dept = getOrThrow(id);
+        return ResponseEntity.ok(new DepartmentApprovalChain(resolveHod(dept), null));
+    }
+
+    private UserResponse resolveHod(Department dept) {
+        if (dept.getHodUserId() != null) {
+            User pinned = userRepository.findById(dept.getHodUserId()).orElse(null);
+            if (pinned != null
+                    && Roles.HOD.equals(pinned.getRole())
+                    && UserService.STATUS_ACTIVE.equals(pinned.getStatus())) {
+                return UserResponse.from(pinned);
+            }
+        }
+        return userRepository
+                .findByRoleAndStatusAndDepartmentId(Roles.HOD, UserService.STATUS_ACTIVE, dept.getId())
+                .stream().findFirst().map(UserResponse::from).orElse(null);
     }
 
     /**

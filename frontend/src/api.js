@@ -111,27 +111,27 @@ export const bookingApi = {
 
   cancel: (id) => api.post(`/api/bookings/${id}/cancel`),
 
-  // ===== Per-line instructor actions =====
+  // ===== Stage 1: department HoD actions =====
+  hodApprove: (bookingId, lineId, note) =>
+    transition(bookingId, lineId, { type: 'HOD_APPROVE', note }),
+  hodReject: (bookingId, lineId, reason) =>
+    transition(bookingId, lineId, { type: 'HOD_REJECT', reason }),
+
+  // ===== Stage 2: lab instructor actions =====
   startReview: (bookingId, lineId) =>
     transition(bookingId, lineId, { type: 'START_REVIEW' }),
+  // Borrowable: approve with a pickup time.
   approve: (bookingId, lineId, { pickupAt, pickupNote }) =>
     transition(bookingId, lineId, { type: 'APPROVE_DIRECTLY', pickupAt, pickupNote }),
+  // Lab-only: confirm an available in-lab time.
+  confirmLab: (bookingId, lineId, { availableTime, note }) =>
+    transition(bookingId, lineId, { type: 'CONFIRM_LAB', availableTime, note }),
   reject: (bookingId, lineId, reason) =>
     transition(bookingId, lineId, { type: 'REJECT', reason }),
-  delegate: (bookingId, lineId, { supervisorUserId, note }) =>
-    transition(bookingId, lineId, { type: 'DELEGATE', supervisorUserId, note }),
-  finalise: (bookingId, lineId, { pickupAt, pickupNote }) =>
-    transition(bookingId, lineId, { type: 'FINALISE', pickupAt, pickupNote }),
   collect: (bookingId, lineId) =>
     transition(bookingId, lineId, { type: 'MARK_COLLECTED' }),
   markReturned: (bookingId, lineId) =>
     transition(bookingId, lineId, { type: 'MARK_RETURNED' }),
-
-  // ===== Per-line supervisor actions =====
-  supervisorApprove: (bookingId, lineId, note) =>
-    transition(bookingId, lineId, { type: 'SUPERVISOR_APPROVE', note }),
-  supervisorDecline: (bookingId, lineId, note) =>
-    transition(bookingId, lineId, { type: 'SUPERVISOR_DECLINE', note }),
 };
 
 export const notificationApi = {

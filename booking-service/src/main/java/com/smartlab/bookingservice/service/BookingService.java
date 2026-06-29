@@ -2,6 +2,8 @@ package com.smartlab.bookingservice.service;
 
 import com.smartlab.bookingservice.auth.BookingAuthorizer;
 import com.smartlab.security.Roles;
+import com.smartlab.security.UsageType;
+import com.smartlab.bookingservice.client.DepartmentClient;
 import com.smartlab.bookingservice.client.ItemClient;
 import com.smartlab.bookingservice.client.LabClient;
 import com.smartlab.bookingservice.client.UserClient;
@@ -35,7 +37,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,6 +60,7 @@ public class BookingService {
     private final UserClient userClient;
     private final ItemClient itemClient;
     private final LabClient labClient;
+    private final DepartmentClient departmentClient;
     private final Notifier<NotificationEvent> notifier;
     private final TransitionEngine engine;
     private final BookingAuthorizer authorizer;
@@ -115,8 +117,14 @@ public class BookingService {
                                 + " (booking #" + c.getBookingId() + ", state " + c.getState() + ")");
             }
 
-            resolved.add(new ResolvedLine(item, lab));
+            resolved.add(new ResolvedLine(item, lab, line.getRequestedUseTime()));
         }
+
+        // Stage 1 routing: every line in a submission goes to the student's department HoD.
+        UserDto hod = resolveDepartmentHod(request.getStudentDepartmentId());
+        Long hodId = hod != null ? hod.getId() : null;
+        // Without a configured HoD we can't run stage 1 — route straight to the instructor.
+        String entryState = hodId != null ? BookingState.AWAITING_HOD : BookingState.SUBMITTED;
 
         Booking b = new Booking();
         b.setStudentUserId(me.userId());
@@ -126,7 +134,7 @@ public class BookingService {
         b.setStartDate(request.getStartDate());
         b.setReturnDate(request.getReturnDate());
         b.setNominatedSupervisorUserId(request.getNominatedSupervisorUserId());
-        b.setState(BookingState.SUBMITTED);
+        b.setState(entryState);
         Booking savedBooking = bookingRepository.save(b);
 
         List<BookingItem> savedLines = new ArrayList<>();
@@ -136,7 +144,10 @@ public class BookingService {
             bi.setItemId(r.item.getId());
             bi.setLabId(r.lab.getId());
             bi.setInstructorUserId(r.lab.getInstructorUserId());
-            bi.setState(BookingState.SUBMITTED);
+            bi.setAssignedHodUserId(hodId);
+            bi.setUsageType(resolveUsageType(r.item.getUsageType()));
+            bi.setRequestedUseTime(r.requestedUseTime());
+            bi.setState(entryState);
             bi.setLastActorUserId(me.userId());
             BookingItem saved = itemRepository.save(bi);
             savedLines.add(saved);
@@ -144,13 +155,13 @@ public class BookingService {
             ev.setBookingId(savedBooking.getId());
             ev.setBookingItemId(saved.getId());
             ev.setActorUserId(me.userId());
-            ev.setToState(BookingState.SUBMITTED);
+            ev.setToState(entryState);
             eventRepository.save(ev);
         }
         BookingEvent umbrellaEv = new BookingEvent();
         umbrellaEv.setBookingId(savedBooking.getId());
         umbrellaEv.setActorUserId(me.userId());
-        umbrellaEv.setToState(BookingState.SUBMITTED);
+        umbrellaEv.setToState(entryState);
         umbrellaEv.setNote("Submitted with " + savedLines.size() + " item(s)");
         eventRepository.save(umbrellaEv);
 
@@ -167,22 +178,29 @@ public class BookingService {
         }
 
         UserDto student = safeGetUser(me.userId());
+        String studentName = student != null ? student.getFullName() : "A student";
         Set<Long> labIds = resolved.stream().map(r -> r.lab.getId()).collect(Collectors.toSet());
         notifier.publish(new NotificationEvent.SubmittedAckToStudent(
                 savedBooking.getId(), me.userId(), savedLines.size(), labIds.size()));
 
-        Map<Long, List<ResolvedLine>> byInstructor = resolved.stream()
-                .collect(Collectors.groupingBy(r -> r.lab.getInstructorUserId(), LinkedHashMap::new, Collectors.toList()));
-        for (var entry : byInstructor.entrySet()) {
-            Long instructorId = entry.getKey();
-            List<ResolvedLine> lines = entry.getValue();
-            String labName = lines.get(0).lab.getName();
-            List<String> itemNames = lines.stream().map(r -> r.item.getName()).collect(Collectors.toList());
-            notifier.publish(new NotificationEvent.SubmittedDigestToInstructor(
-                    savedBooking.getId(), instructorId,
-                    student != null ? student.getFullName() : "A student",
-                    labName, savedBooking.getProjectName(), itemNames,
-                    savedBooking.getStartDate(), savedBooking.getReturnDate()));
+        // One notification per line. With a HoD, stage 1 goes to them; without one,
+        // the line is already at the instructor stage, so notify the instructor instead.
+        for (int i = 0; i < savedLines.size(); i++) {
+            BookingItem line = savedLines.get(i);
+            ResolvedLine r = resolved.get(i);
+            if (hodId != null) {
+                notifier.publish(new NotificationEvent.HodReviewNeeded(
+                        savedBooking.getId(), line.getId(), hodId,
+                        studentName, r.item.getName(), line.getUsageType(), r.lab.getName(),
+                        savedBooking.getProjectName(), savedBooking.getStartDate(), savedBooking.getReturnDate(),
+                        line.getRequestedUseTime()));
+            } else {
+                notifier.publish(new NotificationEvent.HodApprovedToInstructor(
+                        savedBooking.getId(), line.getId(), line.getInstructorUserId(),
+                        studentName, r.item.getName(), line.getUsageType(), r.lab.getName(),
+                        savedBooking.getProjectName(), savedBooking.getStartDate(), savedBooking.getReturnDate(),
+                        line.getRequestedUseTime(), "Routed directly — no HoD configured for the department."));
+            }
         }
 
         return BookingResponse.from(savedBooking, savedLines);
@@ -265,9 +283,9 @@ public class BookingService {
     public List<BookingResponse> listForCurrentSupervisor() {
         UserContext me = CurrentUser.require();
         if (!me.hasAnyRole(Roles.HOD, Roles.LECTURER)) {
-            throw new AuthorizationException("Only HoDs and Lecturers can view this list");
+            throw new AuthorizationException("Only HoDs can view this list");
         }
-        List<BookingItem> myLines = itemRepository.findByAssignedSupervisorUserIdOrderByCreatedAtDesc(me.userId());
+        List<BookingItem> myLines = itemRepository.findByAssignedHodUserIdOrderByCreatedAtDesc(me.userId());
         Set<Long> bookingIds = myLines.stream().map(BookingItem::getBookingId).collect(Collectors.toSet());
         return hydrate(bookingRepository.findAllById(bookingIds));
     }
@@ -329,5 +347,22 @@ public class BookingService {
         catch (Exception ex) { log.warn("user lookup failed id={}", id, ex); return null; }
     }
 
-    private record ResolvedLine(ItemDto item, LabDto lab) {}
+    /** The student's department HoD for stage-1 approval; null if the department has none. */
+    private UserDto resolveDepartmentHod(Long departmentId) {
+        if (departmentId == null) return null;
+        try {
+            DepartmentApprovalChain chain = departmentClient.getApprovalChain(departmentId);
+            return chain != null ? chain.getHod() : null;
+        } catch (Exception ex) {
+            log.warn("approval-chain lookup failed deptId={}: {}", departmentId, ex.getMessage());
+            return null;
+        }
+    }
+
+    /** Snapshot of the item's usage type; default to BORROWABLE when the catalogue didn't set one. */
+    private String resolveUsageType(String usageType) {
+        return UsageType.isValid(usageType) ? usageType : UsageType.BORROWABLE;
+    }
+
+    private record ResolvedLine(ItemDto item, LabDto lab, LocalDateTime requestedUseTime) {}
 }

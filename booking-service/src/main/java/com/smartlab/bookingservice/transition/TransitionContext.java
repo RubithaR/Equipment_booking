@@ -20,13 +20,13 @@ public record TransitionContext(
         UserContext actor,
         UserDto student,
         UserDto instructor,
-        UserDto supervisor,
+        UserDto hod,
         ItemDto item,
         LabDto lab
 ) {
     public String studentName()  { return student != null   ? student.getFullName()   : "the student"; }
     public String itemName()     { return item != null      ? item.getName()          : "the requested item"; }
     public String labName()      { return lab != null       ? lab.getName()           : "the requested lab"; }
-    public String supervisorName() { return supervisor != null ? supervisor.getFullName() : "Supervisor"; }
+    public String hodName()        { return hod != null        ? hod.getFullName()        : "the HoD"; }
     public String instructorName() { return instructor != null ? instructor.getFullName() : "your instructor"; }
 }

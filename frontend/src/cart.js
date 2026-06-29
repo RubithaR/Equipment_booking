@@ -24,7 +24,8 @@ export function clearCart() { write([]); }
 export function cartSize() { return read().length; }
 
 /**
- * Add an item to the cart. Each entry is `{ itemId, labId, name, model, labName }`.
+ * Add an item to the cart. Each entry is
+ * `{ itemId, labId, name, model, labName, usageType }`.
  * Duplicates (same itemId) are ignored.
  */
 export function addToCart(entry) {

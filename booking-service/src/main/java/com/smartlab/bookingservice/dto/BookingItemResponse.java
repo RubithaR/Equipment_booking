@@ -14,7 +14,10 @@ public class BookingItemResponse {
     private Long itemId;
     private Long labId;
     private Long instructorUserId;
+    private Long assignedHodUserId;
     private Long assignedSupervisorUserId;
+    private String usageType;
+    private LocalDateTime requestedUseTime;
     private String state;
     private LocalDateTime pickupAt;
     private String pickupNote;
@@ -23,7 +26,8 @@ public class BookingItemResponse {
     public static BookingItemResponse from(BookingItem bi) {
         return new BookingItemResponse(
                 bi.getId(), bi.getBookingId(), bi.getItemId(), bi.getLabId(),
-                bi.getInstructorUserId(), bi.getAssignedSupervisorUserId(),
+                bi.getInstructorUserId(), bi.getAssignedHodUserId(), bi.getAssignedSupervisorUserId(),
+                bi.getUsageType(), bi.getRequestedUseTime(),
                 bi.getState(), bi.getPickupAt(), bi.getPickupNote(),
                 bi.getLastActorUserId());
     }

@@ -64,7 +64,7 @@ export default function NavBar() {
           )}
           {(role === 'HOD' || role === 'LECTURER') && (
             <>
-              <NavLink to="/supervisor/queue">Queue</NavLink>
+              <NavLink to="/supervisor/queue">Approval Queue</NavLink>
               <NavLink to="/supervisor/notifications">Notifications</NavLink>
             </>
           )}

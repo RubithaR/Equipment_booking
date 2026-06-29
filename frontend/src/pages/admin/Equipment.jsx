@@ -61,7 +61,7 @@ export default function AdminEquipment() {
               <thead>
                 <tr>
                   <th>#</th><th>Name</th><th>Model</th><th>Category</th>
-                  <th>Lab</th><th>Serial</th><th>Status</th><th>Actions</th>
+                  <th>Lab</th><th>Serial</th><th>Usage</th><th>Status</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -75,6 +75,11 @@ export default function AdminEquipment() {
                       <td>{e.category}</td>
                       <td>{lab ? `${lab.name}${lab.location ? ` · ${lab.location}` : ''}` : `Lab #${e.labId}`}</td>
                       <td>{e.serialNumber || '—'}</td>
+                      <td>
+                        <span className={`eq-usage ${(e.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY' ? 'eq-usage-lab' : 'eq-usage-borrow'}`}>
+                          {(e.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY' ? 'Lab only' : 'Borrowable'}
+                        </span>
+                      </td>
                       <td><Badge value={e.status} /></td>
                       <td>
                         <button className="btn btn-danger btn-sm" onClick={() => remove(e)}>Delete</button>

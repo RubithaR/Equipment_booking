@@ -24,6 +24,9 @@ public class ItemRequest {
     @NotBlank(message = "status is required")
     private String status;
 
+    /** BORROWABLE or LAB_ONLY. Defaults to BORROWABLE when omitted. */
+    private String usageType;
+
     private String description;
     private String conditionNote;
 }

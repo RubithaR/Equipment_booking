@@ -1,32 +1,23 @@
 package com.smartlab.bookingservice.notifier;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
+/**
+ * Booking notifications, modelled after the HoD-first flow:
+ * submit -> HoD approves/rejects -> instructor approves (ready for collection,
+ * or, for lab-only items, confirms an available time) / rejects.
+ */
 public sealed interface NotificationEvent permits
-        NotificationEvent.SubmittedDigestToInstructor,
         NotificationEvent.SubmittedAckToStudent,
-        NotificationEvent.DelegatedToSupervisor,
-        NotificationEvent.DelegatedAckToStudent,
-        NotificationEvent.SupervisorApproved,
-        NotificationEvent.SupervisorDeclinedToInstructor,
-        NotificationEvent.SupervisorDeclinedToStudent,
+        NotificationEvent.HodReviewNeeded,
+        NotificationEvent.HodApprovedToInstructor,
+        NotificationEvent.HodDeclinedToStudent,
         NotificationEvent.ReadyForCollection,
+        NotificationEvent.LabConfirmed,
         NotificationEvent.ItemRejected,
         NotificationEvent.BookingCancelled,
         NotificationEvent.OverdueToStudent,
         NotificationEvent.OverdueToInstructor {
-
-    /** One per instructor per submission, even if their lab has several lines. */
-    record SubmittedDigestToInstructor(
-            Long bookingId,
-            Long instructorUserId,
-            String studentFullName,
-            String labName,
-            String projectName,
-            List<String> itemNames,
-            LocalDateTime startDate,
-            LocalDateTime returnDate) implements NotificationEvent {}
 
     record SubmittedAckToStudent(
             Long bookingId,
@@ -34,43 +25,36 @@ public sealed interface NotificationEvent permits
             int itemCount,
             int labCount) implements NotificationEvent {}
 
-    record DelegatedToSupervisor(
+    /** Stage 1: a line landed in the department HoD's queue for approval. */
+    record HodReviewNeeded(
             Long bookingId,
             Long bookingItemId,
-            Long supervisorUserId,
+            Long hodUserId,
             String studentFullName,
             String itemName,
+            String usageType,
             String labName,
             String projectName,
             LocalDateTime startDate,
             LocalDateTime returnDate,
-            String note) implements NotificationEvent {}
+            LocalDateTime requestedUseTime) implements NotificationEvent {}
 
-    record DelegatedAckToStudent(
-            Long bookingId,
-            Long studentUserId,
-            String itemName,
-            String supervisorFullName) implements NotificationEvent {}
-
-    record SupervisorApproved(
+    /** Stage 2: the HoD approved; the line now needs the lab instructor's review. */
+    record HodApprovedToInstructor(
             Long bookingId,
             Long bookingItemId,
             Long instructorUserId,
             String studentFullName,
             String itemName,
-            String supervisorFullName,
+            String usageType,
+            String labName,
+            String projectName,
+            LocalDateTime startDate,
+            LocalDateTime returnDate,
+            LocalDateTime requestedUseTime,
             String note) implements NotificationEvent {}
 
-    record SupervisorDeclinedToInstructor(
-            Long bookingId,
-            Long bookingItemId,
-            Long instructorUserId,
-            String studentFullName,
-            String itemName,
-            String supervisorFullName,
-            String reason) implements NotificationEvent {}
-
-    record SupervisorDeclinedToStudent(
+    record HodDeclinedToStudent(
             Long bookingId,
             Long bookingItemId,
             Long studentUserId,
@@ -87,6 +71,19 @@ public sealed interface NotificationEvent permits
             String instructorPhone,
             LocalDateTime pickupAt,
             String pickupNote) implements NotificationEvent {}
+
+    /** Lab-only: the instructor confirmed a time for the student to use the item in the lab. */
+    record LabConfirmed(
+            Long bookingId,
+            Long bookingItemId,
+            Long studentUserId,
+            String itemName,
+            String labName,
+            String instructorName,
+            String instructorEmail,
+            String instructorPhone,
+            LocalDateTime availableTime,
+            String note) implements NotificationEvent {}
 
     record ItemRejected(
             Long bookingId,

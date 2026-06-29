@@ -6,13 +6,15 @@ import { byId, fmt } from '../../utils/format';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 const ACTIVE_UMBRELLA = new Set([
-  'SUBMITTED', 'INSTRUCTOR_REVIEWING', 'AWAITING_SUPERVISOR',
-  'SUPERVISOR_APPROVED', 'READY_FOR_COLLECTION', 'COLLECTED', 'OVERDUE',
+  'AWAITING_HOD', 'SUBMITTED', 'INSTRUCTOR_REVIEWING',
+  'READY_FOR_COLLECTION', 'LAB_CONFIRMED', 'COLLECTED', 'OVERDUE',
 ]);
 
 const TERMINAL_LINE = new Set([
-  'INSTRUCTOR_REJECTED', 'SUPERVISOR_DECLINED', 'RETURNED', 'CANCELLED',
+  'HOD_REJECTED', 'INSTRUCTOR_REJECTED', 'RETURNED', 'CANCELLED',
 ]);
+
+const isLabOnly = (it) => (it?.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
 
 export default function MyBookings() {
   const location = useLocation();
@@ -106,22 +108,30 @@ function BookingCard({ booking, itemMap, labMap, onCancel }) {
       <div className="table-wrap" style={{ marginTop: 12 }}>
         <table>
           <thead>
-            <tr><th>Item</th><th>Lab</th><th>State</th><th>Pickup</th></tr>
+            <tr><th>Item</th><th>Use</th><th>Lab</th><th>State</th><th>Pickup / Lab time</th></tr>
           </thead>
           <tbody>
             {booking.items.map((line) => {
               const it = itemMap[line.itemId];
               const lb = labMap[line.labId];
+              const labOnly = isLabOnly(it);
               return (
                 <tr key={line.id}>
                   <td>
                     {it ? it.name : `Item #${line.itemId}`}
                     <div style={{ fontSize: 12, color: 'var(--muted)' }}>{it?.model}</div>
                   </td>
+                  <td>
+                    <span className={`eq-usage ${labOnly ? 'eq-usage-lab' : 'eq-usage-borrow'}`}>
+                      {labOnly ? 'Lab only' : 'Borrowable'}
+                    </span>
+                  </td>
                   <td>{lb ? lb.name : `Lab #${line.labId}`}</td>
                   <td><Badge value={line.state} /></td>
                   <td>
-                    {line.pickupAt ? fmt(line.pickupAt) : '—'}
+                    {line.pickupAt ? fmt(line.pickupAt)
+                      : line.requestedUseTime ? <span style={{ color: 'var(--muted)' }}>requested {fmt(line.requestedUseTime)}</span>
+                      : '—'}
                     {line.pickupNote && (
                       <div style={{ fontSize: 12, color: 'var(--muted)' }}>{line.pickupNote}</div>
                     )}

@@ -90,9 +90,9 @@ class TransitionEngineTest {
         return li;
     }
 
-    private BookingItem lineWithSupervisor(String state) {
+    private BookingItem lineWithHod(String state) {
         BookingItem li = line(state);
-        li.setAssignedSupervisorUserId(SUPERVISOR_ID);
+        li.setAssignedHodUserId(SUPERVISOR_ID);
         return li;
     }
 
@@ -195,81 +195,63 @@ class TransitionEngineTest {
         assertThat(ev.reason()).isEqualTo("Wrong lab");
     }
 
-    // ===== Delegate =====
+    // ===== HodApprove =====
 
     @Test
-    void delegate_setsAssignedSupervisorAndNotifiesBothParties() {
-        Booking b  = booking(BookingState.INSTRUCTOR_REVIEWING);
-        BookingItem li = line(BookingState.INSTRUCTOR_REVIEWING);
+    void hodApprove_fromAwaitingHod_movesToSubmitted_notifiesInstructor() {
+        Booking b  = booking(BookingState.AWAITING_HOD);
+        BookingItem li = lineWithHod(BookingState.AWAITING_HOD);
         stubSave(b);
-        stubRollup(BookingState.AWAITING_SUPERVISOR);
+        stubRollup(BookingState.SUBMITTED);
         stubContextLookups();
 
-        BookingItem result = engine.apply(li, new Transition.Delegate(SUPERVISOR_ID, "Please review"), instructor());
+        BookingItem result = engine.apply(li, new Transition.HodApprove("LGTM"), supervisor());
 
-        assertThat(result.getState()).isEqualTo(BookingState.AWAITING_SUPERVISOR);
-        assertThat(result.getAssignedSupervisorUserId()).isEqualTo(SUPERVISOR_ID);
-
-        assertThat(notifier.published()).hasSize(2);
-        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.DelegatedToSupervisor.class);
-        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.DelegatedAckToStudent.class);
-        NotificationEvent.DelegatedToSupervisor sup = (NotificationEvent.DelegatedToSupervisor) notifier.published().get(0);
-        assertThat(sup.supervisorUserId()).isEqualTo(SUPERVISOR_ID);
-    }
-
-    // ===== SupervisorApprove =====
-
-    @Test
-    void supervisorApprove_movesToSupervisorApproved_notifiesInstructor() {
-        Booking b  = booking(BookingState.AWAITING_SUPERVISOR);
-        BookingItem li = lineWithSupervisor(BookingState.AWAITING_SUPERVISOR);
-        stubSave(b);
-        stubRollup(BookingState.SUPERVISOR_APPROVED);
-        stubContextLookups();
-
-        BookingItem result = engine.apply(li, new Transition.SupervisorApprove("LGTM"), supervisor());
-
-        assertThat(result.getState()).isEqualTo(BookingState.SUPERVISOR_APPROVED);
+        assertThat(result.getState()).isEqualTo(BookingState.SUBMITTED);
         assertThat(notifier.published()).hasSize(1);
-        NotificationEvent.SupervisorApproved ev = (NotificationEvent.SupervisorApproved) notifier.published().get(0);
+        NotificationEvent.HodApprovedToInstructor ev =
+                (NotificationEvent.HodApprovedToInstructor) notifier.published().get(0);
         assertThat(ev.instructorUserId()).isEqualTo(INSTRUCTOR_ID);
     }
 
-    // ===== SupervisorDecline =====
+    // ===== HodReject =====
 
     @Test
-    void supervisorDecline_notifiesInstructorAndStudent() {
-        Booking b  = booking(BookingState.AWAITING_SUPERVISOR);
-        BookingItem li = lineWithSupervisor(BookingState.AWAITING_SUPERVISOR);
+    void hodReject_fromAwaitingHod_movesToHodRejected_notifiesStudent() {
+        Booking b  = booking(BookingState.AWAITING_HOD);
+        BookingItem li = lineWithHod(BookingState.AWAITING_HOD);
         stubSave(b);
-        stubRollup(BookingState.SUPERVISOR_DECLINED);
+        stubRollup(BookingState.HOD_REJECTED);
         stubContextLookups();
 
-        engine.apply(li, new Transition.SupervisorDecline("Unavailable"), supervisor());
+        BookingItem result = engine.apply(li, new Transition.HodReject("Out of scope"), supervisor());
 
-        assertThat(notifier.published()).hasSize(2);
-        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.SupervisorDeclinedToInstructor.class);
-        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.SupervisorDeclinedToStudent.class);
+        assertThat(result.getState()).isEqualTo(BookingState.HOD_REJECTED);
+        assertThat(notifier.published()).hasSize(1);
+        NotificationEvent.HodDeclinedToStudent ev =
+                (NotificationEvent.HodDeclinedToStudent) notifier.published().get(0);
+        assertThat(ev.studentUserId()).isEqualTo(STUDENT_ID);
+        assertThat(ev.reason()).isEqualTo("Out of scope");
     }
 
-    // ===== Finalise =====
+    // ===== ConfirmLab =====
 
     @Test
-    void finalise_fromSupervisorApproved_flipsItemAndNotifiesStudent() {
-        Booking b  = booking(BookingState.SUPERVISOR_APPROVED);
-        BookingItem li = line(BookingState.SUPERVISOR_APPROVED);
-        LocalDateTime pickup = LocalDateTime.now().plusHours(2);
+    void confirmLab_fromSubmitted_setsTime_notifiesStudent_noItemFlip() {
+        Booking b  = booking(BookingState.SUBMITTED);
+        BookingItem li = line(BookingState.SUBMITTED);
+        LocalDateTime when = LocalDateTime.now().plusDays(1);
         stubSave(b);
-        stubRollup(BookingState.READY_FOR_COLLECTION);
+        stubRollup(BookingState.LAB_CONFIRMED);
         stubContextLookups();
-        when(itemClient.updateStatus(eq(ITEM_ID), any())).thenReturn(new ItemDto());
 
-        BookingItem result = engine.apply(li, new Transition.Finalise(pickup, null), instructor());
+        BookingItem result = engine.apply(li, new Transition.ConfirmLab(when, "Bench 3"), instructor());
 
-        assertThat(result.getState()).isEqualTo(BookingState.READY_FOR_COLLECTION);
-        verify(itemClient).updateStatus(eq(ITEM_ID), eq(Map.of("status", ItemStatus.IN_USE)));
+        assertThat(result.getState()).isEqualTo(BookingState.LAB_CONFIRMED);
+        assertThat(result.getPickupAt()).isEqualTo(when);
+        verify(itemClient, never()).updateStatus(any(), any());
         assertThat(notifier.published()).hasSize(1);
-        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.ReadyForCollection.class);
+        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.LabConfirmed.class);
     }
 
     // ===== MarkCollected =====

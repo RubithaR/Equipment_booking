@@ -5,6 +5,7 @@ import com.smartlab.equipmentservice.dto.ItemResponse;
 import com.smartlab.equipmentservice.entity.Item;
 import com.smartlab.security.ItemStatus;
 import com.smartlab.security.Roles;
+import com.smartlab.security.UsageType;
 import com.smartlab.equipmentservice.entity.Lab;
 import com.smartlab.security.exception.BadRequestException;
 import com.smartlab.security.exception.NotFoundException;
@@ -34,6 +35,7 @@ public class ItemService {
         if (!ItemStatus.isValid(request.getStatus())) {
             throw new BadRequestException("Invalid status: " + request.getStatus());
         }
+        String usageType = resolveUsageType(request.getUsageType());
 
         Item item = new Item();
         item.setLabId(lab.getId());
@@ -42,6 +44,7 @@ public class ItemService {
         item.setCategory(request.getCategory());
         item.setSerialNumber(request.getSerialNumber());
         item.setStatus(request.getStatus());
+        item.setUsageType(usageType);
         item.setDescription(request.getDescription());
         item.setConditionNote(request.getConditionNote());
         return ItemResponse.from(itemRepository.save(item));
@@ -73,12 +76,14 @@ public class ItemService {
         if (!ItemStatus.isValid(request.getStatus())) {
             throw new BadRequestException("Invalid status: " + request.getStatus());
         }
+        String usageType = resolveUsageType(request.getUsageType());
 
         item.setModel(request.getModel());
         item.setName(request.getName());
         item.setCategory(request.getCategory());
         item.setSerialNumber(request.getSerialNumber());
         item.setStatus(request.getStatus());
+        item.setUsageType(usageType);
         item.setDescription(request.getDescription());
         item.setConditionNote(request.getConditionNote());
         return ItemResponse.from(itemRepository.save(item));
@@ -113,6 +118,15 @@ public class ItemService {
     }
 
     // ===== helpers =====
+
+    /** Default to BORROWABLE when omitted; reject anything that isn't a known usage type. */
+    private String resolveUsageType(String requested) {
+        if (requested == null || requested.isBlank()) return UsageType.BORROWABLE;
+        if (!UsageType.isValid(requested)) {
+            throw new BadRequestException("Invalid usageType: " + requested);
+        }
+        return requested;
+    }
 
     private Item getOrThrow(Long id) {
         return itemRepository.findById(id)

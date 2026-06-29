@@ -14,19 +14,19 @@ public interface BookingItemRepository extends JpaRepository<BookingItem, Long> 
     List<BookingItem> findByBookingIdOrderByIdAsc(Long bookingId);
     List<BookingItem> findByBookingIdInOrderByBookingIdAscIdAsc(java.util.Collection<Long> bookingIds);
     List<BookingItem> findByInstructorUserIdOrderByCreatedAtDesc(Long instructorUserId);
-    List<BookingItem> findByAssignedSupervisorUserIdOrderByCreatedAtDesc(Long supervisorUserId);
+    List<BookingItem> findByAssignedHodUserIdOrderByCreatedAtDesc(Long hodUserId);
 
     /**
      * Time conflicts on a physical item — any booking_item still ACTIVE
      * (holds the item) whose [start_date, return_date] window from the parent
-     * booking overlaps the requested window.
+     * booking overlaps the requested window. Mirrors {@code BookingState.ACTIVE}.
      */
     @Query("""
             SELECT bi FROM BookingItem bi
             JOIN Booking b ON b.id = bi.bookingId
             WHERE bi.itemId = :itemId
-              AND bi.state IN ('SUBMITTED','INSTRUCTOR_REVIEWING','AWAITING_SUPERVISOR',
-                               'SUPERVISOR_APPROVED','READY_FOR_COLLECTION','COLLECTED','OVERDUE')
+              AND bi.state IN ('AWAITING_HOD','SUBMITTED','INSTRUCTOR_REVIEWING',
+                               'READY_FOR_COLLECTION','LAB_CONFIRMED','COLLECTED','OVERDUE')
               AND b.startDate < :end
               AND b.returnDate > :start
             """)

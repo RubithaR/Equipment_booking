@@ -41,14 +41,15 @@ class BookingAuthorizerTest {
         return b;
     }
 
-    private BookingItem lineFor(Long instructorId, Long supervisorId) {
+    private BookingItem lineFor(Long instructorId, Long hodId) {
         BookingItem li = new BookingItem();
         li.setId(10L);
         li.setBookingId(BOOKING_ID);
         li.setItemId(ITEM_ID);
         li.setLabId(LAB_ID);
         li.setInstructorUserId(instructorId);
-        li.setAssignedSupervisorUserId(supervisorId);
+        li.setAssignedHodUserId(hodId);
+        li.setAssignedSupervisorUserId(hodId);
         return li;
     }
 
@@ -185,20 +186,20 @@ class BookingAuthorizerTest {
         @Test
         void supervisorAssigned_HoD_passes() {
             BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
-            authorizer.requireForTransition(user(SUPERVISOR_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED);
+            authorizer.requireForTransition(user(SUPERVISOR_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.HOD_ASSIGNED);
         }
 
         @Test
         void supervisorAssigned_Lecturer_passes() {
             BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
-            authorizer.requireForTransition(user(SUPERVISOR_ID, Roles.LECTURER, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED);
+            authorizer.requireForTransition(user(SUPERVISOR_ID, Roles.LECTURER, DEPT_ID), li, ownedByStudent(), Role.HOD_ASSIGNED);
         }
 
         @Test
         void supervisorAssigned_studentRole_throws403() {
             BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
             assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(SUPERVISOR_ID, Roles.STUDENT, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED))
+                    user(SUPERVISOR_ID, Roles.STUDENT, DEPT_ID), li, ownedByStudent(), Role.HOD_ASSIGNED))
                     .isInstanceOf(AuthorizationException.class);
         }
 
@@ -206,16 +207,16 @@ class BookingAuthorizerTest {
         void supervisorAssigned_butNoSupervisorAssignedToLine_throws403() {
             BookingItem li = lineFor(INSTRUCTOR_ID, null);
             assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(SUPERVISOR_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED))
+                    user(SUPERVISOR_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.HOD_ASSIGNED))
                     .isInstanceOf(AuthorizationException.class)
-                    .hasMessageContaining("not the assigned supervisor");
+                    .hasMessageContaining("not the assigned HoD");
         }
 
         @Test
         void supervisorAssigned_differentSupervisor_throws403() {
             BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
             assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(OTHER_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED))
+                    user(OTHER_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.HOD_ASSIGNED))
                     .isInstanceOf(AuthorizationException.class);
         }
 

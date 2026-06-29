@@ -13,14 +13,17 @@ public final class Roles {
     public static final String INSTRUCTOR = "INSTRUCTOR";
     public static final String STUDENT    = "STUDENT";
 
+    /** Placeholder role for a registered staff member whose real role hasn't been assigned yet. */
+    public static final String STAFF      = "STAFF";
+
     public static final Set<String> ALL = Set.of(
-            MAIN_ADMIN, DEPT_ADMIN, HOD, LECTURER, INSTRUCTOR, STUDENT);
+            MAIN_ADMIN, DEPT_ADMIN, HOD, LECTURER, INSTRUCTOR, STUDENT, STAFF);
 
-    /** Teaching/lab staff who self-register and go live after department admin approval. */
-    public static final Set<String> STAFF = Set.of(HOD, LECTURER, INSTRUCTOR);
+    /** Real staff roles an admin can assign to a registered {@link #STAFF} account. */
+    public static final Set<String> ASSIGNABLE_STAFF = Set.of(HOD, LECTURER, INSTRUCTOR);
 
-    /** Roles a user can pick during self-registration: a student, or any staff member. */
-    public static final Set<String> SELF_REGISTERABLE = Set.of(STUDENT, HOD, LECTURER, INSTRUCTOR);
+    /** Roles a user can pick during self-registration: a student, or an unassigned staff member. */
+    public static final Set<String> SELF_REGISTERABLE = Set.of(STUDENT, STAFF);
 
     public static boolean isValid(String role) {
         return role != null && ALL.contains(role);

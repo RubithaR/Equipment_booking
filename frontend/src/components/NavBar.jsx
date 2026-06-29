@@ -24,6 +24,7 @@ export default function NavBar() {
     : role === 'DEPT_ADMIN' ? 'Department Administrator'
     : role === 'HOD' ? 'Head of Department'
     : role === 'LECTURER' ? 'Lecturer'
+    : role === 'STAFF' ? 'Staff · awaiting role'
     : 'User';
   const initials = (user.fullName || user.email || '?')
     .split(/\s+/).filter(Boolean).slice(0, 2)
@@ -75,6 +76,9 @@ export default function NavBar() {
               <NavLink to="/instructor/pending">My Tasks</NavLink>
               <NavLink to="/hod/notifications">Notifications</NavLink>
             </>
+          )}
+          {role === 'STAFF' && (
+            <NavLink to="/staff">Welcome</NavLink>
           )}
           {admin && (
             <>

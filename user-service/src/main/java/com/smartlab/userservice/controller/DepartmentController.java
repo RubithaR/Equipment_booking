@@ -69,7 +69,9 @@ public class DepartmentController {
 
     /**
      * Assign (or clear) the HoD on a department. Body: {"hodUserId": <id|null>}.
-     * Used as the default supervisor suggestion when an instructor delegates a booking.
+     * Any active staff member of the department can be picked — if they are not
+     * already an HoD they are promoted to the HOD role here, so the booking flow
+     * (which routes stage-1 review to the department HoD) recognises them.
      */
     @PatchMapping("/{id}/hod")
     public ResponseEntity<DepartmentResponse> setHod(@PathVariable Long id,
@@ -79,14 +81,20 @@ public class DepartmentController {
         if (newHodId != null) {
             User u = userRepository.findById(newHodId)
                     .orElseThrow(() -> new BadRequestException("User not found: " + newHodId));
-            if (!Roles.HOD.equals(u.getRole())) {
-                throw new BadRequestException("User must have role HOD");
-            }
             if (!UserService.STATUS_ACTIVE.equals(u.getStatus())) {
                 throw new BadRequestException("User is not active");
             }
-            if (u.getDepartmentId() != null && !u.getDepartmentId().equals(dept.getId())) {
-                throw new BadRequestException("HoD must belong to this department");
+            boolean canHead = Roles.ASSIGNABLE_STAFF.contains(u.getRole())
+                    || Roles.STAFF.equals(u.getRole());
+            if (!canHead) {
+                throw new BadRequestException("Only staff members can be made Head of Department");
+            }
+            // Any staff member can head this department. Make them the HoD here: ensure the
+            // HOD role and move them into this department if they aren't already in it.
+            if (!Roles.HOD.equals(u.getRole()) || !dept.getId().equals(u.getDepartmentId())) {
+                u.setRole(Roles.HOD);
+                u.setDepartmentId(dept.getId());
+                userRepository.save(u);
             }
         }
         dept.setHodUserId(newHodId);

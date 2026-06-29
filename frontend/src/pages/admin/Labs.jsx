@@ -11,6 +11,9 @@ const EMPTY = {
   instructorUserId: '',
 };
 
+const roleLabel = (r) =>
+  ({ INSTRUCTOR: 'Instructor', LECTURER: 'Lecturer', HOD: 'HOD', STAFF: 'awaiting role' }[r] || r);
+
 export default function AdminLabs() {
   const me = getCurrentUser();
   const isMainAdmin = me?.role === 'MAIN_ADMIN';
@@ -29,7 +32,8 @@ export default function AdminLabs() {
       const [labsRes, deptsRes, instructorsRes] = await Promise.all([
         labApi.list(params),
         departmentApi.list().catch(() => ({ data: [] })),
-        userApi.getByRole('INSTRUCTOR').catch(() => ({ data: [] })),
+        // Any active staff member (incl. those still awaiting a role) can be a lab instructor.
+        userApi.search({ q: '', roles: 'STAFF,INSTRUCTOR,LECTURER,HOD', limit: 100 }).catch(() => ({ data: [] })),
       ]);
       if (isCancelled?.()) return;
       setLabs(labsRes.data);
@@ -155,10 +159,8 @@ function LabModal({ initial, isNew, departments, instructors, onClose, onSave })
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  // Filter instructors to those in the chosen department (when known).
-  const eligibleInstructors = form.departmentId
-    ? instructors.filter((u) => u.departmentId == form.departmentId && u.status === 'ACTIVE')
-    : instructors.filter((u) => u.status === 'ACTIVE');
+  // Any active staff member can be a lab instructor — from any department.
+  const eligibleInstructors = instructors.filter((u) => u.status === 'ACTIVE');
 
   const submit = async (e) => {
     e.preventDefault();
@@ -193,7 +195,9 @@ function LabModal({ initial, isNew, departments, instructors, onClose, onSave })
               <select value={form.instructorUserId} onChange={set('instructorUserId')}>
                 <option value="">— Unassigned —</option>
                 {eligibleInstructors.map((u) => (
-                  <option key={u.id} value={u.id}>{u.fullName} ({u.email})</option>
+                  <option key={u.id} value={u.id}>
+                    {u.fullName} ({u.email}){u.role !== 'INSTRUCTOR' ? ` — ${roleLabel(u.role)}` : ''}
+                  </option>
                 ))}
               </select>
             </div>

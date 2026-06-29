@@ -46,5 +46,6 @@ export function homePathFor(role) {
   if (role === 'MAIN_ADMIN' || role === 'DEPT_ADMIN') return '/admin';
   if (role === 'HOD') return '/hod';
   if (role === 'INSTRUCTOR' || role === 'LECTURER') return '/instructor';
+  if (role === 'STAFF') return '/staff';   // registered staff awaiting an admin-assigned role
   return '/student';
 }

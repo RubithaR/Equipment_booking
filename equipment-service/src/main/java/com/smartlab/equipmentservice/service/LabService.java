@@ -35,7 +35,7 @@ public class LabService {
             throw new ConflictException("A lab with that name already exists in this department");
         }
         if (request.getInstructorUserId() != null) {
-            verifyInstructor(request.getInstructorUserId(), request.getDepartmentId());
+            verifyInstructor(request.getInstructorUserId());
         }
 
         Lab lab = new Lab();
@@ -76,7 +76,7 @@ public class LabService {
             throw new ConflictException("A lab with that name already exists in this department");
         }
         if (request.getInstructorUserId() != null) {
-            verifyInstructor(request.getInstructorUserId(), lab.getDepartmentId());
+            verifyInstructor(request.getInstructorUserId());
         }
 
         lab.setName(request.getName());
@@ -92,7 +92,7 @@ public class LabService {
         ensureCanManageDepartment(me, lab.getDepartmentId());
 
         if (instructorUserId != null) {
-            verifyInstructor(instructorUserId, lab.getDepartmentId());
+            verifyInstructor(instructorUserId);
         }
         lab.setInstructorUserId(instructorUserId);
         return LabResponse.from(labRepository.save(lab));
@@ -118,7 +118,12 @@ public class LabService {
         throw new BadRequestException("You can only manage labs within your own department");
     }
 
-    private void verifyInstructor(Long userId, Long departmentId) {
+    /**
+     * A lab instructor can be any active staff member from any department. We do not
+     * change their role here — assigning a lab is just a pointer; roles are granted
+     * explicitly by an admin (Pending Staff / HoD pages).
+     */
+    private void verifyInstructor(Long userId) {
         UserSummary u;
         try {
             u = userClient.getUserById(userId);
@@ -126,15 +131,13 @@ public class LabService {
             throw new BadRequestException("Instructor not found: " + userId);
         }
         if (u == null) throw new BadRequestException("Instructor not found: " + userId);
-        if (!Roles.INSTRUCTOR.equals(u.getRole())) {
-            throw new BadRequestException("User " + userId + " is not an instructor");
+        boolean isStaff = Roles.ASSIGNABLE_STAFF.contains(u.getRole())
+                || Roles.STAFF.equals(u.getRole());
+        if (!isStaff) {
+            throw new BadRequestException("User " + userId + " is not a staff member");
         }
         if (!STATUS_ACTIVE.equals(u.getStatus())) {
-            throw new BadRequestException("Instructor is not active yet");
-        }
-        if (u.getDepartmentId() != null && departmentId != null
-                && !u.getDepartmentId().equals(departmentId)) {
-            throw new BadRequestException("Instructor belongs to a different department");
+            throw new BadRequestException("This staff member is not active yet");
         }
     }
 }

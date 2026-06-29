@@ -26,6 +26,7 @@ import AdminLabs from './pages/admin/Labs';
 import AdminDepartments from './pages/admin/Departments';
 
 import HodDashboard from './pages/hod/HodDashboard';
+import AwaitingRole from './pages/staff/AwaitingRole';
 
 function Shell() {
   return (
@@ -56,6 +57,11 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/terms" element={<Terms />} />
+
+        {/* Registered staff awaiting an admin-assigned role — welcome / holding page with nav */}
+        <Route element={<ProtectedRoute roles={['STAFF']}><Shell /></ProtectedRoute>}>
+          <Route path="/staff" element={<AwaitingRole />} />
+        </Route>
 
         <Route element={<ProtectedRoute roles={['STUDENT']}><Shell /></ProtectedRoute>}>
           <Route path="/student" element={<Navigate to="/student/equipment" replace />} />

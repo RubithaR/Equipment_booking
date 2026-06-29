@@ -51,7 +51,7 @@ public class UserService {
         String role = request.getRole() == null ? "" : request.getRole().toUpperCase();
         if (!Roles.SELF_REGISTERABLE.contains(role)) {
             throw new BadRequestException(
-                    "Role must be STUDENT, or a staff role (INSTRUCTOR, LECTURER, HOD). Admin roles are created by admins.");
+                    "Role must be STUDENT or STAFF. Staff roles (INSTRUCTOR/LECTURER/HOD) are assigned by an admin after sign-up.");
         }
         String email = lower(request.getEmail());
         if (userRepository.existsByEmail(email)) {
@@ -110,8 +110,9 @@ public class UserService {
             user.setUniEmail(uniEmail);
             user.setStatus(STATUS_ACTIVE);
         } else {
-            // Staff self-registration (instructor / lecturer / HOD): wait for department admin approval
-            user.setStatus(STATUS_PENDING);
+            // Staff self-registration: the account is active immediately so they can sign in,
+            // but it carries the placeholder STAFF role until an admin assigns the real role.
+            user.setStatus(STATUS_ACTIVE);
         }
 
         User saved = userRepository.save(user);
@@ -179,28 +180,30 @@ public class UserService {
                 .map(UserResponse::from).collect(Collectors.toList());
     }
 
-    /** Pending staff (instructor / lecturer / HOD) awaiting department admin approval. */
+    /** Registered staff awaiting an admin to assign their real role (placeholder STAFF role). */
     public List<UserResponse> getPendingInstructors(Long departmentId) {
         // DEPT_ADMIN always sees only their own department, even if they pass ?departmentId=
         Long deptScope = deptScopeForCaller();
         Long effective = (deptScope != null) ? deptScope : departmentId;
         List<User> rows = (effective != null)
-                ? userRepository.findByRoleInAndStatusAndDepartmentId(Roles.STAFF, STATUS_PENDING, effective)
-                : userRepository.findByRoleInAndStatus(Roles.STAFF, STATUS_PENDING);
+                ? userRepository.findByRoleAndDepartmentId(Roles.STAFF, effective)
+                : userRepository.findByRole(Roles.STAFF);
         return rows.stream().map(UserResponse::from).collect(Collectors.toList());
     }
 
-    /** Approve any pending staff member (instructor / lecturer / HOD). */
-    public UserResponse approveInstructor(Long id) {
+    /** Assign a real staff role (INSTRUCTOR / LECTURER / HOD) to a registered STAFF account. */
+    public UserResponse assignStaffRole(Long id, String role) {
+        String target = role == null ? "" : role.toUpperCase();
+        if (!Roles.ASSIGNABLE_STAFF.contains(target)) {
+            throw new BadRequestException("Role must be one of: INSTRUCTOR, LECTURER, HOD");
+        }
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
-        if (!Roles.STAFF.contains(user.getRole())) {
-            throw new BadRequestException("User is not a staff member");
+        if (!Roles.STAFF.equals(user.getRole())) {
+            throw new ConflictException("This account already has a role assigned");
         }
         ensureCallerCanManage(user);
-        if (STATUS_ACTIVE.equals(user.getStatus())) {
-            throw new ConflictException("This account is already active");
-        }
+        user.setRole(target);
         user.setStatus(STATUS_ACTIVE);
         User saved = userRepository.save(user);
 
@@ -208,12 +211,12 @@ public class UserService {
         return UserResponse.from(saved);
     }
 
-    /** Reject (delete) a pending staff application. */
+    /** Reject (delete) a registered staff account that has not yet been assigned a role. */
     public void rejectInstructor(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
-        if (!Roles.STAFF.contains(user.getRole())) {
-            throw new BadRequestException("User is not a staff member");
+        if (!Roles.STAFF.equals(user.getRole())) {
+            throw new BadRequestException("Only unassigned staff accounts can be removed here");
         }
         ensureCallerCanManage(user);
         userRepository.delete(user);

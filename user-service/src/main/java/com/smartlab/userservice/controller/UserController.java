@@ -66,20 +66,21 @@ public class UserController {
         return ResponseEntity.ok(userService.search(q, roles, limit));
     }
 
-    // Admin-only: list instructors waiting for approval (optionally scoped to a department)
+    // Admin-only: list registered staff awaiting a role (optionally scoped to a department)
     @GetMapping("/instructors/pending")
     public ResponseEntity<List<UserResponse>> getPendingInstructors(
             @RequestParam(required = false) Long departmentId) {
         return ResponseEntity.ok(userService.getPendingInstructors(departmentId));
     }
 
-    // Admin-only: approve a pending instructor
-    @PatchMapping("/{id}/approve")
-    public ResponseEntity<UserResponse> approve(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.approveInstructor(id));
+    // Admin-only: assign a real role (INSTRUCTOR / LECTURER / HOD) to a registered staff account
+    @PatchMapping("/{id}/assign-role")
+    public ResponseEntity<UserResponse> assignRole(@PathVariable Long id,
+                                                   @RequestBody Map<String, String> body) {
+        return ResponseEntity.ok(userService.assignStaffRole(id, body.get("role")));
     }
 
-    // Admin-only: reject (delete) an instructor application
+    // Admin-only: reject (delete) an unassigned staff account
     @DeleteMapping("/{id}/reject")
     public ResponseEntity<Void> reject(@PathVariable Long id) {
         userService.rejectInstructor(id);

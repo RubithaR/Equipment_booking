@@ -10,8 +10,8 @@ const EN_NUMBER_RE = /^EN\d{6}$/;
 export default function Register() {
   const nav = useNavigate();
   const [kind, setKind] = useState('STUDENT');            // STUDENT | STAFF
-  const [staffRole, setStaffRole] = useState('INSTRUCTOR'); // HOD | LECTURER | INSTRUCTOR
-  const role = kind === 'STUDENT' ? 'STUDENT' : staffRole; // actual role sent to the API
+  // Staff sign up without a role; an admin assigns the real role (HOD/Lecturer/Instructor) later.
+  const role = kind === 'STUDENT' ? 'STUDENT' : 'STAFF';  // actual role sent to the API
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -119,9 +119,9 @@ export default function Register() {
       };
       await userApi.register(payload);
       if (kind === 'STAFF') {
-        setSuccess('Account created. Awaiting department admin approval — you will be notified. Redirecting to sign in…');
+        setSuccess('Account created. Sign in to continue — an administrator will assign your role. Redirecting to sign in…');
       } else {
-        setSuccess('Account created. Awaiting your department instructor\'s approval — you will be notified. Redirecting to sign in…');
+        setSuccess('Account created. You can sign in now. Redirecting to sign in…');
       }
       setTimeout(() => nav('/login'), 3000);
     } catch (err) {
@@ -159,19 +159,15 @@ export default function Register() {
             setEmailFmtErr('');
           }}>
             <option value="STUDENT">Student</option>
-            <option value="STAFF">Staff (requires department admin approval)</option>
+            <option value="STAFF">Staff (role assigned by admin after sign-up)</option>
           </select>
         </div>
 
         {kind === 'STAFF' && (
-          <div className="field">
-            <label>Staff role</label>
-            <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
-              <option value="INSTRUCTOR">Instructor</option>
-              <option value="LECTURER">Lecturer</option>
-              <option value="HOD">Head of Department (HOD)</option>
-            </select>
-          </div>
+          <p className="auth-sub" style={{ marginTop: -4 }}>
+            Sign up now — an administrator will assign your role (Head of Department, Lecturer or
+            Instructor) once your account is reviewed. You can sign in straight away to check your status.
+          </p>
         )}
 
         <form onSubmit={submit}>

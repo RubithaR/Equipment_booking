@@ -50,7 +50,8 @@ export const userApi = {
     api.get('/api/users/instructors/pending', {
       params: departmentId ? { departmentId } : {},
     }),
-  approveInstructor: (id) => api.patch(`/api/users/${id}/approve`),
+  // Assign a real staff role (INSTRUCTOR / LECTURER / HOD) to a registered staff account.
+  assignRole: (id, role) => api.patch(`/api/users/${id}/assign-role`, { role }),
   rejectInstructor: (id) => api.delete(`/api/users/${id}/reject`),
   // Free-text + role search. roles is a CSV string e.g. "HOD,LECTURER".
   search: ({ q, roles, limit = 20 }) =>

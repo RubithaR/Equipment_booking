@@ -47,6 +47,9 @@ public class BookingRequest {
 
         @NotNull(message = "labId is required")
         private Long labId;
+
+        /** Optional lab-session time the student requests; meaningful for LAB_ONLY items. */
+        private LocalDateTime requestedUseTime;
     }
 
     @Data

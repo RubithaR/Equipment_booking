@@ -37,6 +37,10 @@ public class Item {
     @Column(nullable = false, length = 40)
     private String status;
 
+    // BORROWABLE (taken out of the lab) or LAB_ONLY (used in-lab at a confirmed time)
+    @Column(name = "usage_type", nullable = false, length = 20)
+    private String usageType;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 

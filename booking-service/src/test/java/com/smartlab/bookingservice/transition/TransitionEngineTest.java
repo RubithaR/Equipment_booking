@@ -141,12 +141,11 @@ class TransitionEngineTest {
 
         assertThat(result.getState()).isEqualTo(BookingState.AWAITING_HANDLER);
         assertThat(result.getInstructorUserId()).isEqualTo(HANDLER_ID);
-        assertThat(notifier.published()).hasSize(2);
-        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.DelegatedToSupervisor.class);
-        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.DelegatedAckToStudent.class);
-        NotificationEvent.DelegatedToSupervisor toHandler =
-                (NotificationEvent.DelegatedToSupervisor) notifier.published().get(0);
-        assertThat(toHandler.supervisorUserId()).isEqualTo(HANDLER_ID);
+        assertThat(notifier.published()).hasSize(1);
+        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.HodApprovedToInstructor.class);
+        NotificationEvent.HodApprovedToInstructor toHandler =
+                (NotificationEvent.HodApprovedToInstructor) notifier.published().get(0);
+        assertThat(toHandler.instructorUserId()).isEqualTo(HANDLER_ID);
     }
 
     // ===== HodReject =====

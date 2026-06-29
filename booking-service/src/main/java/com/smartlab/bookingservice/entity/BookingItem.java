@@ -37,9 +37,21 @@ public class BookingItem {
     @Column(name = "instructor_user_id", nullable = false)
     private Long instructorUserId;
 
-    /** Set when the instructor delegates this line to a supervisor. */
+    /** The department HoD this line is routed to for stage-1 approval (null if the dept has none). */
+    @Column(name = "assigned_hod_user_id")
+    private Long assignedHodUserId;
+
+    /** Legacy: the old instructor-initiated supervisor delegation. No longer written. */
     @Column(name = "assigned_supervisor_user_id")
     private Long assignedSupervisorUserId;
+
+    /** Snapshot of the item's usage type (BORROWABLE or LAB_ONLY) at submission. */
+    @Column(name = "usage_type", nullable = false, length = 20)
+    private String usageType;
+
+    /** The lab-session time the student requested (LAB_ONLY lines only; null otherwise). */
+    @Column(name = "requested_use_time")
+    private LocalDateTime requestedUseTime;
 
     @Column(nullable = false, length = 40)
     private String state;

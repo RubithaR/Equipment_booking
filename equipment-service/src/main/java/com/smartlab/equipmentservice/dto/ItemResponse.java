@@ -14,12 +14,13 @@ public class ItemResponse {
     private String category;
     private String serialNumber;
     private String status;
+    private String usageType;
     private String description;
     private String conditionNote;
 
     public static ItemResponse from(Item i) {
         return new ItemResponse(
                 i.getId(), i.getLabId(), i.getModel(), i.getName(), i.getCategory(),
-                i.getSerialNumber(), i.getStatus(), i.getDescription(), i.getConditionNote());
+                i.getSerialNumber(), i.getStatus(), i.getUsageType(), i.getDescription(), i.getConditionNote());
     }
 }

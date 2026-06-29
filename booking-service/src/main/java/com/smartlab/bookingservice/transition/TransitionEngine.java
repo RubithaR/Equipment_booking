@@ -141,8 +141,8 @@ public class TransitionEngine {
                 booking, line, fromState, actor,
                 safeUser(booking.getStudentUserId()),
                 safeUser(line.getInstructorUserId()),
-                line.getAssignedSupervisorUserId() != null
-                        ? safeUser(line.getAssignedSupervisorUserId()) : null,
+                line.getAssignedHodUserId() != null
+                        ? safeUser(line.getAssignedHodUserId()) : null,
                 safeItem(line.getItemId()),
                 safeLab(line.getLabId()));
     }

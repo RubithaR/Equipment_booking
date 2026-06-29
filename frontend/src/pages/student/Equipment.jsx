@@ -65,7 +65,7 @@ export default function Equipment() {
   return (
     <div className="container">
       <h1 className="page-title">Browse Equipment</h1>
-      <p className="page-sub">Add multiple items to your cart, then submit one booking — each lab's instructor reviews their own items.</p>
+      <p className="page-sub">Add available items to your cart, then submit one booking. Each request goes to your Head of Department first, then the lab's instructor. Borrowable items are taken out of the lab; lab-only items are used in the lab at a confirmed time.</p>
 
       <div className="filter-bar">
         <input placeholder="Search by name, model, category or lab…" value={search}
@@ -101,12 +101,18 @@ export default function Equipment() {
               const lab = labLookup[e.labId];
               // Booked items stay bookable — students just pick a date after bookedUntil.
               const bookable = !blocked && lab?.instructorUserId;
+              const labOnly = (e.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
               const inCart = isInCart(e.id);
               return (
                 <article key={e.id} className="eq-card">
                   <div className="eq-card-row">
                     <span className="eq-cat">{e.category || 'General'}</span>
                     <span className={`eq-status ${statusClass}`}>{statusLabel}</span>
+                  </div>
+                  <div className="eq-card-row" style={{ marginTop: 4 }}>
+                    <span className={`eq-usage ${labOnly ? 'eq-usage-lab' : 'eq-usage-borrow'}`}>
+                      {labOnly ? '🏫 Lab use only' : '📦 Borrowable'}
+                    </span>
                   </div>
                   <h3 className="eq-title">{e.name}</h3>
                   <div className="eq-meta">
@@ -145,6 +151,7 @@ export default function Equipment() {
                                 itemId: e.id, labId: e.labId,
                                 name: e.name, model: e.model,
                                 labName: lab?.name,
+                                usageType: e.usageType || 'BORROWABLE',
                               })}>
                         Add to cart
                       </button>

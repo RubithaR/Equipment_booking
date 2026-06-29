@@ -68,16 +68,13 @@ public sealed interface Transition permits
         public Role requiredRole()      { return Role.HOD_OF_STUDENT_DEPT; }
         public void mutate(BookingItem l) { l.setInstructorUserId(handlerUserId); }
         public List<NotificationEvent> notifications(TransitionContext c) {
-            return List.of(
-                    // Reuses the existing "assignment" event; recipient is the chosen handler.
-                    new NotificationEvent.DelegatedToSupervisor(
-                            c.booking().getId(), c.line().getId(), c.line().getInstructorUserId(),
-                            c.studentName(), c.itemName(), c.labName(),
-                            c.booking().getProjectName(),
-                            c.booking().getStartDate(), c.booking().getReturnDate(), note),
-                    new NotificationEvent.DelegatedAckToStudent(
-                            c.booking().getId(), c.booking().getStudentUserId(),
-                            c.itemName(), c.instructorName()));
+            // HoD approved and assigned a handler — notify that handler (the line's instructorUserId).
+            return List.of(new NotificationEvent.HodApprovedToInstructor(
+                    c.booking().getId(), c.line().getId(), c.line().getInstructorUserId(),
+                    c.studentName(), c.itemName(), c.line().getUsageType(),
+                    c.labName(), c.booking().getProjectName(),
+                    c.booking().getStartDate(), c.booking().getReturnDate(),
+                    c.line().getRequestedUseTime(), note));
         }
     }
 

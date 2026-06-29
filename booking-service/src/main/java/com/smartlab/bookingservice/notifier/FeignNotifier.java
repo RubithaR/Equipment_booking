@@ -22,70 +22,49 @@ public class FeignNotifier implements Notifier<NotificationEvent> {
     @Override
     public void publish(NotificationEvent event) {
         switch (event) {
-            case NotificationEvent.SubmittedDigestToInstructor e -> dispatch(
-                    e.instructorUserId(), "BOOKING_NEEDS_REVIEW", Map.of(
-                            "bookingId",       e.bookingId(),
-                            "studentFullName", e.studentFullName(),
-                            "labName",         e.labName(),
-                            "projectName",     e.projectName(),
-                            "itemNames",       e.itemNames(),
-                            "startDate",       str(e.startDate()),
-                            "returnDate",      str(e.returnDate())));
-
             case NotificationEvent.SubmittedAckToStudent e -> dispatch(
                     e.studentUserId(), "BOOKING_SUBMITTED", Map.of(
                             "bookingId", e.bookingId(),
                             "itemCount", e.itemCount(),
                             "labCount",  e.labCount()));
 
-            case NotificationEvent.DelegatedToSupervisor e -> {
+            case NotificationEvent.HodReviewNeeded e -> {
                 Map<String, Object> p = new HashMap<>();
                 p.put("bookingId",       e.bookingId());
                 p.put("bookingItemId",   e.bookingItemId());
                 p.put("studentFullName", e.studentFullName());
                 p.put("itemName",        e.itemName());
+                p.put("usageType",       e.usageType());
                 p.put("labName",         e.labName());
                 p.put("projectName",     e.projectName());
                 p.put("startDate",       str(e.startDate()));
                 p.put("returnDate",      str(e.returnDate()));
-                if (e.note() != null) p.put("note", e.note());
-                dispatch(e.supervisorUserId(), "BOOKING_NEEDS_SUPERVISOR_APPROVAL", p);
+                if (e.requestedUseTime() != null) p.put("requestedUseTime", str(e.requestedUseTime()));
+                dispatch(e.hodUserId(), "BOOKING_NEEDS_HOD_APPROVAL", p);
             }
 
-            case NotificationEvent.DelegatedAckToStudent e -> dispatch(
-                    e.studentUserId(), "BOOKING_DELEGATED", Map.of(
-                            "bookingId",           e.bookingId(),
-                            "itemName",            e.itemName(),
-                            "supervisorFullName",  e.supervisorFullName()));
-
-            case NotificationEvent.SupervisorApproved e -> {
+            case NotificationEvent.HodApprovedToInstructor e -> {
                 Map<String, Object> p = new HashMap<>();
-                p.put("bookingId",        e.bookingId());
-                p.put("bookingItemId",    e.bookingItemId());
-                p.put("studentFullName",  e.studentFullName());
-                p.put("itemName",         e.itemName());
-                p.put("supervisorFullName", e.supervisorFullName());
+                p.put("bookingId",       e.bookingId());
+                p.put("bookingItemId",   e.bookingItemId());
+                p.put("studentFullName", e.studentFullName());
+                p.put("itemName",        e.itemName());
+                p.put("usageType",       e.usageType());
+                p.put("labName",         e.labName());
+                p.put("projectName",     e.projectName());
+                p.put("startDate",       str(e.startDate()));
+                p.put("returnDate",      str(e.returnDate()));
+                if (e.requestedUseTime() != null) p.put("requestedUseTime", str(e.requestedUseTime()));
                 if (e.note() != null) p.put("note", e.note());
-                dispatch(e.instructorUserId(), "BOOKING_SUPERVISOR_APPROVED", p);
+                dispatch(e.instructorUserId(), "BOOKING_HOD_APPROVED", p);
             }
 
-            case NotificationEvent.SupervisorDeclinedToInstructor e -> {
-                Map<String, Object> p = new HashMap<>();
-                p.put("bookingId",          e.bookingId());
-                p.put("bookingItemId",      e.bookingItemId());
-                p.put("studentFullName",    e.studentFullName());
-                p.put("itemName",           e.itemName());
-                p.put("supervisorFullName", e.supervisorFullName());
-                if (e.reason() != null) p.put("reason", e.reason());
-                dispatch(e.instructorUserId(), "BOOKING_SUPERVISOR_DECLINED_INSTRUCTOR", p);
-            }
-
-            case NotificationEvent.SupervisorDeclinedToStudent e -> {
+            case NotificationEvent.HodDeclinedToStudent e -> {
                 Map<String, Object> p = new HashMap<>();
                 p.put("bookingId", e.bookingId());
                 p.put("itemName",  e.itemName());
                 if (e.reason() != null) p.put("reason", e.reason());
-                dispatch(e.studentUserId(), "BOOKING_SUPERVISOR_DECLINED_STUDENT", p);
+                dispatch(e.studentUserId(), "BOOKING_HOD_DECLINED", p);
             }
 
             case NotificationEvent.ReadyForCollection e -> {
@@ -98,6 +77,19 @@ public class FeignNotifier implements Notifier<NotificationEvent> {
                 if (e.instructorPhone() != null) p.put("instructorPhone", e.instructorPhone());
                 if (e.pickupNote()      != null) p.put("pickupNote",      e.pickupNote());
                 dispatch(e.studentUserId(), "BOOKING_APPROVED", p);
+            }
+
+            case NotificationEvent.LabConfirmed e -> {
+                Map<String, Object> p = new HashMap<>();
+                p.put("bookingId",       e.bookingId());
+                p.put("itemName",        e.itemName());
+                p.put("labName",         e.labName());
+                p.put("instructorName",  e.instructorName());
+                p.put("instructorEmail", e.instructorEmail());
+                p.put("availableTime",   str(e.availableTime()));
+                if (e.instructorPhone() != null) p.put("instructorPhone", e.instructorPhone());
+                if (e.note()            != null) p.put("note",            e.note());
+                dispatch(e.studentUserId(), "BOOKING_LAB_CONFIRMED", p);
             }
 
             case NotificationEvent.ItemRejected e -> {

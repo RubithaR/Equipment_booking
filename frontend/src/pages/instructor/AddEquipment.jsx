@@ -21,8 +21,8 @@ const EMPTY = {
   category: '',
   serialNumber: '',
   status: 'AVAILABLE',
+  usageType: 'BORROWABLE',
   description: '',
-  labId: '',
 };
 
 export default function AddEquipment() {
@@ -33,18 +33,6 @@ export default function AddEquipment() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [recent, setRecent] = useState([]);
-  const [myLabs, setMyLabs] = useState([]);
-
-  const loadLabs = async () => {
-    try {
-      // Show only labs assigned to this instructor.
-      const { data } = await labApi.list({ instructorUserId: me?.id });
-      setLabs(data);
-      if (data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
-    } catch {
-      setLabs([]);
-    }
-  };
 
   const loadRecent = async (isCancelled) => {
     try {
@@ -211,6 +199,31 @@ export default function AddEquipment() {
           <div className="add-eq-section">
             <div className="add-eq-section-head">
               <span className="add-eq-section-num">04</span>
+              <div>
+                <h2>Usage</h2>
+                <p>Can students take this out of the lab, or is it lab-use only?</p>
+              </div>
+            </div>
+            <div className="status-choice">
+              {[
+                { v: 'BORROWABLE', t: 'Borrowable', d: 'Taken out of the lab; collect & return', cls: 'ok' },
+                { v: 'LAB_ONLY', t: 'Lab use only', d: 'Used in the lab at a confirmed time', cls: 'warn' },
+              ].map((opt) => (
+                <label key={opt.v} className={`status-card ${form.usageType === opt.v ? 'status-card-on' : ''}`}>
+                  <input type="radio" name="usageType" value={opt.v}
+                         checked={form.usageType === opt.v}
+                         onChange={set('usageType')} />
+                  <span className={`status-dot status-dot-${opt.cls}`} />
+                  <span className="status-title">{opt.t}</span>
+                  <span className="status-desc">{opt.d}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="add-eq-section">
+            <div className="add-eq-section-head">
+              <span className="add-eq-section-num">05</span>
               <div>
                 <h2>Description</h2>
                 <p>Specs, accessories, or safety notes (optional).</p>

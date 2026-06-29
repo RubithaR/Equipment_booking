@@ -115,7 +115,7 @@ public class BookingService {
                                 + " (booking #" + c.getBookingId() + ", state " + c.getState() + ")");
             }
 
-            resolved.add(new ResolvedLine(item, lab));
+            resolved.add(new ResolvedLine(item, lab, line.getRequestedUseTime()));
         }
 
         Booking b = new Booking();
@@ -136,6 +136,9 @@ public class BookingService {
             bi.setItemId(r.item.getId());
             bi.setLabId(r.lab.getId());
             bi.setInstructorUserId(r.lab.getInstructorUserId());
+            // Snapshot the item's usage type (borrowable / lab-only) at submission.
+            bi.setUsageType(r.item.getUsageType() != null ? r.item.getUsageType() : "BORROWABLE");
+            bi.setRequestedUseTime(r.requestedUseTime());
             bi.setState(BookingState.SUBMITTED);
             bi.setLastActorUserId(me.userId());
             BookingItem saved = itemRepository.save(bi);
@@ -367,5 +370,5 @@ public class BookingService {
         catch (Exception ex) { log.warn("user lookup failed id={}", id, ex); return null; }
     }
 
-    private record ResolvedLine(ItemDto item, LabDto lab) {}
+    private record ResolvedLine(ItemDto item, LabDto lab, java.time.LocalDateTime requestedUseTime) {}
 }

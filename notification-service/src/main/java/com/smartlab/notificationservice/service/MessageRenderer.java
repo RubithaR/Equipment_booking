@@ -35,7 +35,45 @@ public class MessageRenderer {
                     "Your booking #" + str(p, "bookingId")
                             + " (" + num(p, "itemCount") + " item" + (num(p, "itemCount") == 1 ? "" : "s")
                             + " across " + num(p, "labCount") + " lab" + (num(p, "labCount") == 1 ? "" : "s")
-                            + ") is awaiting instructor review.");
+                            + ") is awaiting your Head of Department's approval.");
+
+            case "BOOKING_NEEDS_HOD_APPROVAL" -> new Rendered(
+                    "Booking awaiting your approval",
+                    str(p, "studentFullName") + " requested " + str(p, "itemName")
+                            + " (" + usageLabel(str(p, "usageType")) + ")"
+                            + " from " + str(p, "labName")
+                            + " · " + str(p, "projectName")
+                            + " · " + str(p, "startDate") + " → " + str(p, "returnDate")
+                            + labTimeClause(strOrNull(p, "requestedUseTime")));
+
+            case "BOOKING_HOD_APPROVED" -> new Rendered(
+                    "HoD approved — awaiting your review",
+                    "Your HoD approved line #" + str(p, "bookingItemId")
+                            + " of booking #" + str(p, "bookingId")
+                            + ": " + str(p, "studentFullName") + " requested "
+                            + str(p, "itemName") + " (" + usageLabel(str(p, "usageType")) + ")"
+                            + " from " + str(p, "labName")
+                            + " · " + str(p, "startDate") + " → " + str(p, "returnDate")
+                            + labTimeClause(strOrNull(p, "requestedUseTime"))
+                            + noteClause(strOrNull(p, "note"), "HoD's note"));
+
+            case "BOOKING_HOD_DECLINED" -> new Rendered(
+                    "Booking line declined by HoD",
+                    "Your booking #" + str(p, "bookingId")
+                            + " line for " + str(p, "itemName")
+                            + " was declined by the Head of Department."
+                            + noteClause(strOrNull(p, "reason"), "Reason"));
+
+            case "BOOKING_LAB_CONFIRMED" -> new Rendered(
+                    "Lab use confirmed",
+                    "Your booking #" + str(p, "bookingId")
+                            + " line for " + str(p, "itemName")
+                            + " is approved for in-lab use at " + str(p, "availableTime")
+                            + " in " + str(p, "labName")
+                            + " with " + str(p, "instructorName")
+                            + " (" + str(p, "instructorEmail")
+                            + (strOrNull(p, "instructorPhone") != null ? ", " + str(p, "instructorPhone") : "") + ")."
+                            + noteClause(strOrNull(p, "note"), "Note"));
 
             case "BOOKING_NEEDS_SUPERVISOR_APPROVAL" -> new Rendered(
                     "Booking awaiting your approval",
@@ -152,6 +190,15 @@ public class MessageRenderer {
 
     private static String noteClause(String note, String label) {
         return (note != null && !note.isBlank()) ? " " + label + ": " + note : "";
+    }
+
+    private static String usageLabel(String usageType) {
+        return "LAB_ONLY".equals(usageType) ? "lab use only" : "borrowable";
+    }
+
+    private static String labTimeClause(String requestedUseTime) {
+        return (requestedUseTime != null && !requestedUseTime.isBlank())
+                ? " · requested lab time: " + requestedUseTime : "";
     }
 
     private static String summariseItems(List<String> names) {

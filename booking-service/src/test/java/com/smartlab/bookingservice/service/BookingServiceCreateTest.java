@@ -139,20 +139,19 @@ class BookingServiceCreateTest {
     // ===== Happy path =====
 
     @Test
-    void create_validRequest_persistsAndDispatchesTwoEvents() {
+    void create_validRequest_persistsAndAcksStudent() {
         stubHappyPath();
 
         BookingResponse response = service.create(validRequest());
 
         assertThat(response).isNotNull();
-        assertThat(notifier.published()).hasSize(2);
+        // Submission only acks the student; the HOD reviews it from their queue.
+        assertThat(notifier.published()).hasSize(1);
         assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.SubmittedAckToStudent.class);
-        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.SubmittedDigestToInstructor.class);
 
-        NotificationEvent.SubmittedDigestToInstructor digest =
-                (NotificationEvent.SubmittedDigestToInstructor) notifier.published().get(1);
-        assertThat(digest.instructorUserId()).isEqualTo(INSTRUCTOR_ID);
-        assertThat(digest.studentFullName()).isEqualTo("Alice");
+        NotificationEvent.SubmittedAckToStudent ack =
+                (NotificationEvent.SubmittedAckToStudent) notifier.published().get(0);
+        assertThat(ack.studentUserId()).isEqualTo(STUDENT_ID);
     }
 
     // ===== Authorization =====

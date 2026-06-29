@@ -56,22 +56,30 @@ export default function NavBar() {
           {role === 'INSTRUCTOR' && (
             <>
               <NavLink to="/instructor/equipment/new">Add Equipment</NavLink>
-              <NavLink to="/instructor/students-pending">Pending Students</NavLink>
-              <NavLink to="/instructor/pending">Pending Bookings</NavLink>
+              <NavLink to="/instructor/pending">My Tasks</NavLink>
               <NavLink to="/instructor/all">All Bookings</NavLink>
               <NavLink to="/instructor/notifications">Notifications</NavLink>
             </>
           )}
-          {(role === 'HOD' || role === 'LECTURER') && (
+          {role === 'LECTURER' && (
             <>
-              <NavLink to="/supervisor/queue">Queue</NavLink>
-              <NavLink to="/supervisor/notifications">Notifications</NavLink>
+              <NavLink to="/instructor/students-pending">Pending Students</NavLink>
+              <NavLink to="/instructor/pending">My Tasks</NavLink>
+              <NavLink to="/instructor/all">All Bookings</NavLink>
+              <NavLink to="/instructor/notifications">Notifications</NavLink>
+            </>
+          )}
+          {role === 'HOD' && (
+            <>
+              <NavLink to="/hod">Review Requests</NavLink>
+              <NavLink to="/instructor/pending">My Tasks</NavLink>
+              <NavLink to="/hod/notifications">Notifications</NavLink>
             </>
           )}
           {admin && (
             <>
               <NavLink to="/admin">Overview</NavLink>
-              <NavLink to="/admin/instructors-pending">Pending Instructors</NavLink>
+              <NavLink to="/admin/instructors-pending">Pending Staff</NavLink>
               <NavLink to="/admin/users">Users</NavLink>
               <NavLink to="/admin/departments">Departments</NavLink>
               <NavLink to="/admin/labs">Labs</NavLink>

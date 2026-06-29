@@ -16,8 +16,11 @@ public final class Roles {
     public static final Set<String> ALL = Set.of(
             MAIN_ADMIN, DEPT_ADMIN, HOD, LECTURER, INSTRUCTOR, STUDENT);
 
-    /** Roles a user can pick during self-registration. */
-    public static final Set<String> SELF_REGISTERABLE = Set.of(STUDENT, INSTRUCTOR);
+    /** Teaching/lab staff who self-register and go live after department admin approval. */
+    public static final Set<String> STAFF = Set.of(HOD, LECTURER, INSTRUCTOR);
+
+    /** Roles a user can pick during self-registration: a student, or any staff member. */
+    public static final Set<String> SELF_REGISTERABLE = Set.of(STUDENT, HOD, LECTURER, INSTRUCTOR);
 
     public static boolean isValid(String role) {
         return role != null && ALL.contains(role);

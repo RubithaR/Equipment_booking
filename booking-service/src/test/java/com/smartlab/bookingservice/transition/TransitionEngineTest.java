@@ -53,8 +53,8 @@ class TransitionEngineTest {
     static final Long ITEM_ID       = 20L;
     static final Long LAB_ID        = 30L;
     static final Long STUDENT_ID    = 100L;
-    static final Long INSTRUCTOR_ID = 200L;
-    static final Long SUPERVISOR_ID = 300L;
+    static final Long HANDLER_ID    = 200L;   // assigned handler (instructor/lecturer/HOD)
+    static final Long HOD_ID        = 400L;   // the student's department HOD
     static final Long DEPT_ID       = 5L;
 
     @BeforeEach
@@ -85,27 +85,21 @@ class TransitionEngineTest {
         li.setBookingId(BOOKING_ID);
         li.setItemId(ITEM_ID);
         li.setLabId(LAB_ID);
-        li.setInstructorUserId(INSTRUCTOR_ID);
+        li.setInstructorUserId(HANDLER_ID);   // lab default at submit; the assigned handler thereafter
         li.setState(state);
         return li;
     }
 
-    private BookingItem lineWithSupervisor(String state) {
-        BookingItem li = line(state);
-        li.setAssignedSupervisorUserId(SUPERVISOR_ID);
-        return li;
+    private UserContext hod() {
+        return new UserContext(HOD_ID, "hod@uni.com", "HOD", null, DEPT_ID);
     }
 
-    private UserContext instructor() {
-        return new UserContext(INSTRUCTOR_ID, "instructor@lab.com", "INSTRUCTOR", null, DEPT_ID);
+    private UserContext handler() {
+        return new UserContext(HANDLER_ID, "handler@lab.com", "INSTRUCTOR", null, DEPT_ID);
     }
 
     private UserContext student() {
         return new UserContext(STUDENT_ID, "student@uni.com", "STUDENT", null, DEPT_ID);
-    }
-
-    private UserContext supervisor() {
-        return new UserContext(SUPERVISOR_ID, "hod@uni.com", "HOD", null, DEPT_ID);
     }
 
     private void stubSave(Booking b) {
@@ -122,166 +116,109 @@ class TransitionEngineTest {
     }
 
     private void stubContextLookups() {
-        UserDto student    = new UserDto(); student.setFullName("Alice");    student.setId(STUDENT_ID);
-        UserDto instructor = new UserDto(); instructor.setFullName("Bob");   instructor.setId(INSTRUCTOR_ID);
-        UserDto supervisor = new UserDto(); supervisor.setFullName("Carol"); supervisor.setId(SUPERVISOR_ID);
+        UserDto studentU = new UserDto(); studentU.setFullName("Alice");  studentU.setId(STUDENT_ID);
+        UserDto handlerU = new UserDto(); handlerU.setFullName("Bob");    handlerU.setId(HANDLER_ID);
         ItemDto item = new ItemDto(); item.setId(ITEM_ID); item.setName("Oscilloscope"); item.setLabId(LAB_ID);
         LabDto  lab  = new LabDto();  lab.setId(LAB_ID);  lab.setName("Electronics Lab");
 
-        when(userClient.getUserById(STUDENT_ID)).thenReturn(student);
-        when(userClient.getUserById(INSTRUCTOR_ID)).thenReturn(instructor);
-        lenient().when(userClient.getUserById(SUPERVISOR_ID)).thenReturn(supervisor);
+        when(userClient.getUserById(STUDENT_ID)).thenReturn(studentU);
+        when(userClient.getUserById(HANDLER_ID)).thenReturn(handlerU);
         when(itemClient.getItemById(ITEM_ID)).thenReturn(item);
         when(labClient.getLabById(LAB_ID)).thenReturn(lab);
     }
 
-    // ===== StartReview =====
+    // ===== HodApprove =====
 
     @Test
-    void startReview_movesLineToInstructorReviewing_noNotificationsNoFeign() {
-        Booking b  = booking(BookingState.SUBMITTED);
+    void hodApprove_assignsHandler_movesToAwaitingHandler_notifiesHandlerAndStudent() {
+        Booking b = booking(BookingState.SUBMITTED);
         BookingItem li = line(BookingState.SUBMITTED);
         stubSave(b);
-        stubRollup(BookingState.INSTRUCTOR_REVIEWING);
+        stubRollup(BookingState.AWAITING_HANDLER);
+        stubContextLookups();
 
-        BookingItem result = engine.apply(li, new Transition.StartReview(), instructor());
+        BookingItem result = engine.apply(li, new Transition.HodApprove(HANDLER_ID, "Please handle"), hod());
 
-        assertThat(result.getState()).isEqualTo(BookingState.INSTRUCTOR_REVIEWING);
-        assertThat(notifier.published()).isEmpty();
-        verifyNoInteractions(userClient, itemClient, labClient);
+        assertThat(result.getState()).isEqualTo(BookingState.AWAITING_HANDLER);
+        assertThat(result.getInstructorUserId()).isEqualTo(HANDLER_ID);
+        assertThat(notifier.published()).hasSize(2);
+        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.DelegatedToSupervisor.class);
+        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.DelegatedAckToStudent.class);
+        NotificationEvent.DelegatedToSupervisor toHandler =
+                (NotificationEvent.DelegatedToSupervisor) notifier.published().get(0);
+        assertThat(toHandler.supervisorUserId()).isEqualTo(HANDLER_ID);
     }
 
-    // ===== ApproveDirectly =====
+    // ===== HodReject =====
 
     @Test
-    void approveDirectly_fromSubmitted_setsPickupAndNotifiesStudent() {
-        Booking b  = booking(BookingState.SUBMITTED);
+    void hodReject_movesLineToRejected_notifiesStudent() {
+        Booking b = booking(BookingState.SUBMITTED);
         BookingItem li = line(BookingState.SUBMITTED);
+        stubSave(b);
+        stubRollup(BookingState.REJECTED);
+        stubContextLookups();
+
+        BookingItem result = engine.apply(li, new Transition.HodReject("Out of scope"), hod());
+
+        assertThat(result.getState()).isEqualTo(BookingState.REJECTED);
+        assertThat(notifier.published()).hasSize(1);
+        NotificationEvent.ItemRejected ev = (NotificationEvent.ItemRejected) notifier.published().get(0);
+        assertThat(ev.studentUserId()).isEqualTo(STUDENT_ID);
+        assertThat(ev.reason()).isEqualTo("Out of scope");
+    }
+
+    // ===== HandlerApprove =====
+
+    @Test
+    void handlerApprove_fromAwaitingHandler_setsPickupFlipsItemNotifiesStudent() {
+        Booking b = booking(BookingState.AWAITING_HANDLER);
+        BookingItem li = line(BookingState.AWAITING_HANDLER);
         LocalDateTime pickup = LocalDateTime.now().plusDays(1);
         stubSave(b);
         stubRollup(BookingState.READY_FOR_COLLECTION);
         stubContextLookups();
         when(itemClient.updateStatus(eq(ITEM_ID), any())).thenReturn(new ItemDto());
 
-        BookingItem result = engine.apply(li, new Transition.ApproveDirectly(pickup, "Bring your ID"), instructor());
+        BookingItem result = engine.apply(li, new Transition.HandlerApprove(pickup, "Bring your ID"), handler());
 
         assertThat(result.getState()).isEqualTo(BookingState.READY_FOR_COLLECTION);
         assertThat(result.getPickupAt()).isEqualTo(pickup);
         assertThat(result.getPickupNote()).isEqualTo("Bring your ID");
         verify(itemClient).updateStatus(eq(ITEM_ID), eq(Map.of("status", ItemStatus.IN_USE)));
-
         assertThat(notifier.published()).hasSize(1);
         assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.ReadyForCollection.class);
         NotificationEvent.ReadyForCollection ev = (NotificationEvent.ReadyForCollection) notifier.published().get(0);
         assertThat(ev.studentUserId()).isEqualTo(STUDENT_ID);
     }
 
-    // ===== Reject =====
+    // ===== HandlerReject =====
 
     @Test
-    void reject_movesLineToRejected_notifiesStudent() {
-        Booking b  = booking(BookingState.INSTRUCTOR_REVIEWING);
-        BookingItem li = line(BookingState.INSTRUCTOR_REVIEWING);
+    void handlerReject_movesLineToRejected_notifiesStudent() {
+        Booking b = booking(BookingState.AWAITING_HANDLER);
+        BookingItem li = line(BookingState.AWAITING_HANDLER);
         stubSave(b);
-        stubRollup(BookingState.INSTRUCTOR_REJECTED);
+        stubRollup(BookingState.REJECTED);
         stubContextLookups();
 
-        BookingItem result = engine.apply(li, new Transition.Reject("Wrong lab"), instructor());
+        BookingItem result = engine.apply(li, new Transition.HandlerReject("Item busy"), handler());
 
-        assertThat(result.getState()).isEqualTo(BookingState.INSTRUCTOR_REJECTED);
+        assertThat(result.getState()).isEqualTo(BookingState.REJECTED);
         assertThat(notifier.published()).hasSize(1);
-        NotificationEvent.ItemRejected ev = (NotificationEvent.ItemRejected) notifier.published().get(0);
-        assertThat(ev.studentUserId()).isEqualTo(STUDENT_ID);
-        assertThat(ev.reason()).isEqualTo("Wrong lab");
-    }
-
-    // ===== Delegate =====
-
-    @Test
-    void delegate_setsAssignedSupervisorAndNotifiesBothParties() {
-        Booking b  = booking(BookingState.INSTRUCTOR_REVIEWING);
-        BookingItem li = line(BookingState.INSTRUCTOR_REVIEWING);
-        stubSave(b);
-        stubRollup(BookingState.AWAITING_SUPERVISOR);
-        stubContextLookups();
-
-        BookingItem result = engine.apply(li, new Transition.Delegate(SUPERVISOR_ID, "Please review"), instructor());
-
-        assertThat(result.getState()).isEqualTo(BookingState.AWAITING_SUPERVISOR);
-        assertThat(result.getAssignedSupervisorUserId()).isEqualTo(SUPERVISOR_ID);
-
-        assertThat(notifier.published()).hasSize(2);
-        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.DelegatedToSupervisor.class);
-        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.DelegatedAckToStudent.class);
-        NotificationEvent.DelegatedToSupervisor sup = (NotificationEvent.DelegatedToSupervisor) notifier.published().get(0);
-        assertThat(sup.supervisorUserId()).isEqualTo(SUPERVISOR_ID);
-    }
-
-    // ===== SupervisorApprove =====
-
-    @Test
-    void supervisorApprove_movesToSupervisorApproved_notifiesInstructor() {
-        Booking b  = booking(BookingState.AWAITING_SUPERVISOR);
-        BookingItem li = lineWithSupervisor(BookingState.AWAITING_SUPERVISOR);
-        stubSave(b);
-        stubRollup(BookingState.SUPERVISOR_APPROVED);
-        stubContextLookups();
-
-        BookingItem result = engine.apply(li, new Transition.SupervisorApprove("LGTM"), supervisor());
-
-        assertThat(result.getState()).isEqualTo(BookingState.SUPERVISOR_APPROVED);
-        assertThat(notifier.published()).hasSize(1);
-        NotificationEvent.SupervisorApproved ev = (NotificationEvent.SupervisorApproved) notifier.published().get(0);
-        assertThat(ev.instructorUserId()).isEqualTo(INSTRUCTOR_ID);
-    }
-
-    // ===== SupervisorDecline =====
-
-    @Test
-    void supervisorDecline_notifiesInstructorAndStudent() {
-        Booking b  = booking(BookingState.AWAITING_SUPERVISOR);
-        BookingItem li = lineWithSupervisor(BookingState.AWAITING_SUPERVISOR);
-        stubSave(b);
-        stubRollup(BookingState.SUPERVISOR_DECLINED);
-        stubContextLookups();
-
-        engine.apply(li, new Transition.SupervisorDecline("Unavailable"), supervisor());
-
-        assertThat(notifier.published()).hasSize(2);
-        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.SupervisorDeclinedToInstructor.class);
-        assertThat(notifier.published().get(1)).isInstanceOf(NotificationEvent.SupervisorDeclinedToStudent.class);
-    }
-
-    // ===== Finalise =====
-
-    @Test
-    void finalise_fromSupervisorApproved_flipsItemAndNotifiesStudent() {
-        Booking b  = booking(BookingState.SUPERVISOR_APPROVED);
-        BookingItem li = line(BookingState.SUPERVISOR_APPROVED);
-        LocalDateTime pickup = LocalDateTime.now().plusHours(2);
-        stubSave(b);
-        stubRollup(BookingState.READY_FOR_COLLECTION);
-        stubContextLookups();
-        when(itemClient.updateStatus(eq(ITEM_ID), any())).thenReturn(new ItemDto());
-
-        BookingItem result = engine.apply(li, new Transition.Finalise(pickup, null), instructor());
-
-        assertThat(result.getState()).isEqualTo(BookingState.READY_FOR_COLLECTION);
-        verify(itemClient).updateStatus(eq(ITEM_ID), eq(Map.of("status", ItemStatus.IN_USE)));
-        assertThat(notifier.published()).hasSize(1);
-        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.ReadyForCollection.class);
+        assertThat(notifier.published().get(0)).isInstanceOf(NotificationEvent.ItemRejected.class);
     }
 
     // ===== MarkCollected =====
 
     @Test
     void markCollected_movesLineToCollected_noNotificationsNoFeign() {
-        Booking b  = booking(BookingState.READY_FOR_COLLECTION);
+        Booking b = booking(BookingState.READY_FOR_COLLECTION);
         BookingItem li = line(BookingState.READY_FOR_COLLECTION);
         stubSave(b);
         stubRollup(BookingState.COLLECTED);
 
-        BookingItem result = engine.apply(li, new Transition.MarkCollected(), instructor());
+        BookingItem result = engine.apply(li, new Transition.MarkCollected(), handler());
 
         assertThat(result.getState()).isEqualTo(BookingState.COLLECTED);
         assertThat(notifier.published()).isEmpty();
@@ -292,13 +229,13 @@ class TransitionEngineTest {
 
     @Test
     void markReturned_flipsItemToAvailable_noNotificationsNoFeign() {
-        Booking b  = booking(BookingState.COLLECTED);
+        Booking b = booking(BookingState.COLLECTED);
         BookingItem li = line(BookingState.COLLECTED);
         stubSave(b);
         stubRollup(BookingState.RETURNED);
         when(itemClient.updateStatus(eq(ITEM_ID), any())).thenReturn(new ItemDto());
 
-        BookingItem result = engine.apply(li, new Transition.MarkReturned(), instructor());
+        BookingItem result = engine.apply(li, new Transition.MarkReturned(), handler());
 
         assertThat(result.getState()).isEqualTo(BookingState.RETURNED);
         verify(itemClient).updateStatus(eq(ITEM_ID), eq(Map.of("status", ItemStatus.AVAILABLE)));
@@ -309,8 +246,8 @@ class TransitionEngineTest {
     // ===== FlipOverdue =====
 
     @Test
-    void flipOverdue_notifiesStudentAndInstructor() {
-        Booking b  = booking(BookingState.COLLECTED);
+    void flipOverdue_notifiesStudentAndHandler() {
+        Booking b = booking(BookingState.COLLECTED);
         BookingItem li = line(BookingState.COLLECTED);
         stubSave(b);
         stubRollup(BookingState.OVERDUE);
@@ -327,7 +264,7 @@ class TransitionEngineTest {
 
     @Test
     void cancel_fromSubmitted_movesLineToCancelled_noItemFlip() {
-        Booking b  = booking(BookingState.SUBMITTED);
+        Booking b = booking(BookingState.SUBMITTED);
         BookingItem li = line(BookingState.SUBMITTED);
         stubSave(b);
         stubRollup(BookingState.CANCELLED);
@@ -340,7 +277,7 @@ class TransitionEngineTest {
 
     @Test
     void cancel_fromReadyForCollection_flipsItemToAvailable() {
-        Booking b  = booking(BookingState.READY_FOR_COLLECTION);
+        Booking b = booking(BookingState.READY_FOR_COLLECTION);
         BookingItem li = line(BookingState.READY_FOR_COLLECTION);
         stubSave(b);
         stubRollup(BookingState.CANCELLED);
@@ -355,14 +292,15 @@ class TransitionEngineTest {
 
     @Test
     void bookingStateIsRecomputedAfterTransition() {
-        Booking b  = booking(BookingState.SUBMITTED);
+        Booking b = booking(BookingState.SUBMITTED);
         BookingItem li = line(BookingState.SUBMITTED);
         stubSave(b);
-        stubRollup(BookingState.INSTRUCTOR_REVIEWING);
+        stubRollup(BookingState.AWAITING_HANDLER);
+        stubContextLookups();
 
-        engine.apply(li, new Transition.StartReview(), instructor());
+        engine.apply(li, new Transition.HodApprove(HANDLER_ID, null), hod());
 
-        assertThat(b.getState()).isEqualTo(BookingState.INSTRUCTOR_REVIEWING);
+        assertThat(b.getState()).isEqualTo(BookingState.AWAITING_HANDLER);
         verify(bookingRepository).save(b);
     }
 }

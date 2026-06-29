@@ -18,30 +18,28 @@ import java.util.Set;
  * what to mutate, whether to flip the underlying item, and which notifications
  * to fire. The engine runs the same skeleton for every one of them.
  *
- * Wire shape: {@code { "type": "APPROVE_DIRECTLY", "pickupAt": "...", "pickupNote": "..." }}.
+ * Flow: SUBMITTED --(HOD approve, assigns handler)--> AWAITING_HANDLER
+ *       --(handler approve)--> READY_FOR_COLLECTION --> COLLECTED --> RETURNED.
+ * Either the HOD or the handler can REJECT; the student can CANCEL pre-pickup.
+ *
+ * Wire shape: {@code { "type": "HOD_APPROVE", "handlerUserId": 12, "note": "..." }}.
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = Transition.StartReview.class,        name = "START_REVIEW"),
-        @JsonSubTypes.Type(value = Transition.ApproveDirectly.class,    name = "APPROVE_DIRECTLY"),
-        @JsonSubTypes.Type(value = Transition.Reject.class,             name = "REJECT"),
-        @JsonSubTypes.Type(value = Transition.Delegate.class,           name = "DELEGATE"),
-        @JsonSubTypes.Type(value = Transition.Finalise.class,           name = "FINALISE"),
-        @JsonSubTypes.Type(value = Transition.SupervisorApprove.class,  name = "SUPERVISOR_APPROVE"),
-        @JsonSubTypes.Type(value = Transition.SupervisorDecline.class,  name = "SUPERVISOR_DECLINE"),
-        @JsonSubTypes.Type(value = Transition.MarkCollected.class,      name = "MARK_COLLECTED"),
-        @JsonSubTypes.Type(value = Transition.MarkReturned.class,       name = "MARK_RETURNED"),
-        @JsonSubTypes.Type(value = Transition.FlipOverdue.class,        name = "FLIP_OVERDUE"),
-        @JsonSubTypes.Type(value = Transition.Cancel.class,             name = "CANCEL"),
+        @JsonSubTypes.Type(value = Transition.HodApprove.class,      name = "HOD_APPROVE"),
+        @JsonSubTypes.Type(value = Transition.HodReject.class,       name = "HOD_REJECT"),
+        @JsonSubTypes.Type(value = Transition.HandlerApprove.class,  name = "HANDLER_APPROVE"),
+        @JsonSubTypes.Type(value = Transition.HandlerReject.class,   name = "HANDLER_REJECT"),
+        @JsonSubTypes.Type(value = Transition.MarkCollected.class,   name = "MARK_COLLECTED"),
+        @JsonSubTypes.Type(value = Transition.MarkReturned.class,    name = "MARK_RETURNED"),
+        @JsonSubTypes.Type(value = Transition.FlipOverdue.class,     name = "FLIP_OVERDUE"),
+        @JsonSubTypes.Type(value = Transition.Cancel.class,          name = "CANCEL"),
 })
 public sealed interface Transition permits
-        Transition.StartReview,
-        Transition.ApproveDirectly,
-        Transition.Reject,
-        Transition.Delegate,
-        Transition.Finalise,
-        Transition.SupervisorApprove,
-        Transition.SupervisorDecline,
+        Transition.HodApprove,
+        Transition.HodReject,
+        Transition.HandlerApprove,
+        Transition.HandlerReject,
         Transition.MarkCollected,
         Transition.MarkReturned,
         Transition.FlipOverdue,
@@ -63,33 +61,30 @@ public sealed interface Transition permits
 
     // ===== Records =====
 
-    record StartReview() implements Transition {
-        public Set<String> fromStates()    { return Set.of(BookingState.SUBMITTED); }
-        public String toState()            { return BookingState.INSTRUCTOR_REVIEWING; }
-        public Role requiredRole()         { return Role.INSTRUCTOR_OWNER; }
-        public boolean hasNotifications()  { return false; }
-    }
-
-    record ApproveDirectly(LocalDateTime pickupAt, String pickupNote) implements Transition {
-        public Set<String> fromStates() { return Set.of(BookingState.SUBMITTED, BookingState.INSTRUCTOR_REVIEWING); }
-        public String toState()         { return BookingState.READY_FOR_COLLECTION; }
-        public Role requiredRole()      { return Role.INSTRUCTOR_OWNER; }
-        public void mutate(BookingItem l) { l.setPickupAt(pickupAt); l.setPickupNote(pickupNote); }
-        public Optional<String> itemStatusFlip(String fromState) { return Optional.of(ItemStatus.IN_USE); }
+    /** The student's department HOD approves and assigns a handler (instructor / lecturer / HOD). */
+    record HodApprove(Long handlerUserId, String note) implements Transition {
+        public Set<String> fromStates() { return Set.of(BookingState.SUBMITTED); }
+        public String toState()         { return BookingState.AWAITING_HANDLER; }
+        public Role requiredRole()      { return Role.HOD_OF_STUDENT_DEPT; }
+        public void mutate(BookingItem l) { l.setInstructorUserId(handlerUserId); }
         public List<NotificationEvent> notifications(TransitionContext c) {
-            return List.of(new NotificationEvent.ReadyForCollection(
-                    c.booking().getId(), c.line().getId(), c.booking().getStudentUserId(),
-                    c.itemName(), c.instructorName(),
-                    c.instructor() != null ? c.instructor().getEmail() : "",
-                    c.instructor() != null ? c.instructor().getPhoneNumber() : null,
-                    pickupAt, pickupNote));
+            return List.of(
+                    // Reuses the existing "assignment" event; recipient is the chosen handler.
+                    new NotificationEvent.DelegatedToSupervisor(
+                            c.booking().getId(), c.line().getId(), c.line().getInstructorUserId(),
+                            c.studentName(), c.itemName(), c.labName(),
+                            c.booking().getProjectName(),
+                            c.booking().getStartDate(), c.booking().getReturnDate(), note),
+                    new NotificationEvent.DelegatedAckToStudent(
+                            c.booking().getId(), c.booking().getStudentUserId(),
+                            c.itemName(), c.instructorName()));
         }
     }
 
-    record Reject(String reason) implements Transition {
-        public Set<String> fromStates() { return Set.of(BookingState.SUBMITTED, BookingState.INSTRUCTOR_REVIEWING); }
-        public String toState()         { return BookingState.INSTRUCTOR_REJECTED; }
-        public Role requiredRole()      { return Role.INSTRUCTOR_OWNER; }
+    record HodReject(String reason) implements Transition {
+        public Set<String> fromStates() { return Set.of(BookingState.SUBMITTED); }
+        public String toState()         { return BookingState.REJECTED; }
+        public Role requiredRole()      { return Role.HOD_OF_STUDENT_DEPT; }
         public List<NotificationEvent> notifications(TransitionContext c) {
             return List.of(new NotificationEvent.ItemRejected(
                     c.booking().getId(), c.line().getId(), c.booking().getStudentUserId(),
@@ -97,28 +92,11 @@ public sealed interface Transition permits
         }
     }
 
-    record Delegate(Long supervisorUserId, String note) implements Transition {
-        public Set<String> fromStates() { return Set.of(BookingState.SUBMITTED, BookingState.INSTRUCTOR_REVIEWING); }
-        public String toState()         { return BookingState.AWAITING_SUPERVISOR; }
-        public Role requiredRole()      { return Role.INSTRUCTOR_OWNER; }
-        public void mutate(BookingItem l) { l.setAssignedSupervisorUserId(supervisorUserId); }
-        public List<NotificationEvent> notifications(TransitionContext c) {
-            return List.of(
-                    new NotificationEvent.DelegatedToSupervisor(
-                            c.booking().getId(), c.line().getId(), supervisorUserId,
-                            c.studentName(), c.itemName(), c.labName(),
-                            c.booking().getProjectName(),
-                            c.booking().getStartDate(), c.booking().getReturnDate(), note),
-                    new NotificationEvent.DelegatedAckToStudent(
-                            c.booking().getId(), c.booking().getStudentUserId(),
-                            c.itemName(), c.supervisorName()));
-        }
-    }
-
-    record Finalise(LocalDateTime pickupAt, String pickupNote) implements Transition {
-        public Set<String> fromStates() { return Set.of(BookingState.SUPERVISOR_APPROVED); }
+    /** The assigned handler approves and sets pickup details — item becomes ready to collect. */
+    record HandlerApprove(LocalDateTime pickupAt, String pickupNote) implements Transition {
+        public Set<String> fromStates() { return Set.of(BookingState.AWAITING_HANDLER); }
         public String toState()         { return BookingState.READY_FOR_COLLECTION; }
-        public Role requiredRole()      { return Role.INSTRUCTOR_OWNER; }
+        public Role requiredRole()      { return Role.HANDLER_ASSIGNED; }
         public void mutate(BookingItem l) { l.setPickupAt(pickupAt); l.setPickupNote(pickupNote); }
         public Optional<String> itemStatusFlip(String fromState) { return Optional.of(ItemStatus.IN_USE); }
         public List<NotificationEvent> notifications(TransitionContext c) {
@@ -131,43 +109,28 @@ public sealed interface Transition permits
         }
     }
 
-    record SupervisorApprove(String note) implements Transition {
-        public Set<String> fromStates() { return Set.of(BookingState.AWAITING_SUPERVISOR); }
-        public String toState()         { return BookingState.SUPERVISOR_APPROVED; }
-        public Role requiredRole()      { return Role.SUPERVISOR_ASSIGNED; }
+    record HandlerReject(String reason) implements Transition {
+        public Set<String> fromStates() { return Set.of(BookingState.AWAITING_HANDLER); }
+        public String toState()         { return BookingState.REJECTED; }
+        public Role requiredRole()      { return Role.HANDLER_ASSIGNED; }
         public List<NotificationEvent> notifications(TransitionContext c) {
-            return List.of(new NotificationEvent.SupervisorApproved(
-                    c.booking().getId(), c.line().getId(), c.line().getInstructorUserId(),
-                    c.studentName(), c.itemName(), c.supervisorName(), note));
-        }
-    }
-
-    record SupervisorDecline(String note) implements Transition {
-        public Set<String> fromStates() { return Set.of(BookingState.AWAITING_SUPERVISOR); }
-        public String toState()         { return BookingState.SUPERVISOR_DECLINED; }
-        public Role requiredRole()      { return Role.SUPERVISOR_ASSIGNED; }
-        public List<NotificationEvent> notifications(TransitionContext c) {
-            return List.of(
-                    new NotificationEvent.SupervisorDeclinedToInstructor(
-                            c.booking().getId(), c.line().getId(), c.line().getInstructorUserId(),
-                            c.studentName(), c.itemName(), c.supervisorName(), note),
-                    new NotificationEvent.SupervisorDeclinedToStudent(
-                            c.booking().getId(), c.line().getId(), c.booking().getStudentUserId(),
-                            c.itemName(), note));
+            return List.of(new NotificationEvent.ItemRejected(
+                    c.booking().getId(), c.line().getId(), c.booking().getStudentUserId(),
+                    c.itemName(), reason));
         }
     }
 
     record MarkCollected() implements Transition {
         public Set<String> fromStates()   { return Set.of(BookingState.READY_FOR_COLLECTION); }
         public String toState()           { return BookingState.COLLECTED; }
-        public Role requiredRole()        { return Role.INSTRUCTOR_OWNER; }
+        public Role requiredRole()        { return Role.HANDLER_ASSIGNED; }
         public boolean hasNotifications() { return false; }
     }
 
     record MarkReturned() implements Transition {
         public Set<String> fromStates()   { return Set.of(BookingState.COLLECTED, BookingState.OVERDUE); }
         public String toState()           { return BookingState.RETURNED; }
-        public Role requiredRole()        { return Role.INSTRUCTOR_OWNER; }
+        public Role requiredRole()        { return Role.HANDLER_ASSIGNED; }
         public boolean hasNotifications() { return false; }
         public Optional<String> itemStatusFlip(String fromState) { return Optional.of(ItemStatus.AVAILABLE); }
     }
@@ -189,13 +152,12 @@ public sealed interface Transition permits
 
     /**
      * Per-line cancel. Booking-level orchestration (filter cancellable lines,
-     * fire one BookingCancelled per unique instructor) lives in BookingService.
+     * fire one BookingCancelled per unique handler) lives in BookingService.
      */
     record Cancel() implements Transition {
         public Set<String> fromStates() {
             return Set.of(
-                    BookingState.SUBMITTED, BookingState.INSTRUCTOR_REVIEWING,
-                    BookingState.AWAITING_SUPERVISOR, BookingState.SUPERVISOR_APPROVED,
+                    BookingState.SUBMITTED, BookingState.AWAITING_HANDLER,
                     BookingState.READY_FOR_COLLECTION);
         }
         public String toState()           { return BookingState.CANCELLED; }

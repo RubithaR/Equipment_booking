@@ -44,7 +44,7 @@ export function logout() {
 
 export function homePathFor(role) {
   if (role === 'MAIN_ADMIN' || role === 'DEPT_ADMIN') return '/admin';
-  if (role === 'INSTRUCTOR') return '/instructor';
-  if (role === 'HOD' || role === 'LECTURER') return '/supervisor';
+  if (role === 'HOD') return '/hod';
+  if (role === 'INSTRUCTOR' || role === 'LECTURER') return '/instructor';
   return '/student';
 }

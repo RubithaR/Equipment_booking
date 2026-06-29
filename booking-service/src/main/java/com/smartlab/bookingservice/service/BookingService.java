@@ -166,24 +166,10 @@ public class BookingService {
             }
         }
 
-        UserDto student = safeGetUser(me.userId());
+        // The student's department HOD reviews this from their queue and assigns a handler.
         Set<Long> labIds = resolved.stream().map(r -> r.lab.getId()).collect(Collectors.toSet());
         notifier.publish(new NotificationEvent.SubmittedAckToStudent(
                 savedBooking.getId(), me.userId(), savedLines.size(), labIds.size()));
-
-        Map<Long, List<ResolvedLine>> byInstructor = resolved.stream()
-                .collect(Collectors.groupingBy(r -> r.lab.getInstructorUserId(), LinkedHashMap::new, Collectors.toList()));
-        for (var entry : byInstructor.entrySet()) {
-            Long instructorId = entry.getKey();
-            List<ResolvedLine> lines = entry.getValue();
-            String labName = lines.get(0).lab.getName();
-            List<String> itemNames = lines.stream().map(r -> r.item.getName()).collect(Collectors.toList());
-            notifier.publish(new NotificationEvent.SubmittedDigestToInstructor(
-                    savedBooking.getId(), instructorId,
-                    student != null ? student.getFullName() : "A student",
-                    labName, savedBooking.getProjectName(), itemNames,
-                    savedBooking.getStartDate(), savedBooking.getReturnDate()));
-        }
 
         return BookingResponse.from(savedBooking, savedLines);
     }
@@ -252,24 +238,44 @@ public class BookingService {
         return hydrate(bookingRepository.findByStudentUserIdOrderByCreatedAtDesc(me.userId()));
     }
 
+    /** Handler queue — lines an HOD has assigned to me (instructor / lecturer / HOD). */
     public List<BookingResponse> listForCurrentInstructor() {
         UserContext me = CurrentUser.require();
-        if (!me.hasRole(Roles.INSTRUCTOR)) {
-            throw new AuthorizationException("Only instructors can view this list");
+        if (!me.hasAnyRole(Roles.INSTRUCTOR, Roles.LECTURER, Roles.HOD)) {
+            throw new AuthorizationException("Only staff can view this list");
         }
-        List<BookingItem> myLines = itemRepository.findByInstructorUserIdOrderByCreatedAtDesc(me.userId());
+        // Exclude SUBMITTED — those are still awaiting HOD review, not yet handed to a handler.
+        List<BookingItem> myLines = itemRepository.findByInstructorUserIdOrderByCreatedAtDesc(me.userId()).stream()
+                .filter(l -> !BookingState.SUBMITTED.equals(l.getState()))
+                .collect(Collectors.toList());
         Set<Long> bookingIds = myLines.stream().map(BookingItem::getBookingId).collect(Collectors.toSet());
         return hydrate(bookingRepository.findAllById(bookingIds));
     }
 
-    public List<BookingResponse> listForCurrentSupervisor() {
+    /** HOD dashboard Tab 1 — booking requests from my department awaiting my review. */
+    public List<BookingResponse> listAwaitingHod() {
         UserContext me = CurrentUser.require();
-        if (!me.hasAnyRole(Roles.HOD, Roles.LECTURER)) {
-            throw new AuthorizationException("Only HoDs and Lecturers can view this list");
+        if (!me.hasRole(Roles.HOD)) {
+            throw new AuthorizationException("Only HODs can view this list");
         }
-        List<BookingItem> myLines = itemRepository.findByAssignedSupervisorUserIdOrderByCreatedAtDesc(me.userId());
-        Set<Long> bookingIds = myLines.stream().map(BookingItem::getBookingId).collect(Collectors.toSet());
-        return hydrate(bookingRepository.findAllById(bookingIds));
+        Long dept = me.departmentId();
+        if (dept == null) return List.of();
+        return hydrate(bookingRepository
+                .findByStudentDepartmentIdAndStateOrderByCreatedAtDesc(dept, BookingState.SUBMITTED));
+    }
+
+    /** HOD dashboard Tab 2 — requests from my department I've already processed (approved/sent or rejected). */
+    public List<BookingResponse> listHodProcessed() {
+        UserContext me = CurrentUser.require();
+        if (!me.hasRole(Roles.HOD)) {
+            throw new AuthorizationException("Only HODs can view this list");
+        }
+        Long dept = me.departmentId();
+        if (dept == null) return List.of();
+        List<Booking> rows = bookingRepository.findByStudentDepartmentIdOrderByCreatedAtDesc(dept).stream()
+                .filter(b -> !BookingState.SUBMITTED.equals(b.getState()))
+                .collect(Collectors.toList());
+        return hydrate(rows);
     }
 
     public List<BookingResponse> listAll(String state) {
@@ -286,9 +292,9 @@ public class BookingService {
 
     /**
      * Booking-derived availability for a set of items — what the student catalogue
-     * and cart use to show "in process" / "in use" and the date each item is free
-     * again. Items with no active hold come back as AVAILABLE so the caller can
-     * render every requested id in one pass.
+     * and cart use to show "in use" and the date each item is free again. Any active
+     * hold (awaiting approval or approved) reports as IN_USE; items with no hold come
+     * back as AVAILABLE so the caller can render every requested id in one pass.
      */
     public List<ItemAvailabilityResponse> availability(List<Long> itemIds) {
         CurrentUser.require();
@@ -304,15 +310,14 @@ public class BookingService {
                 out.add(new ItemAvailabilityResponse(itemId, "AVAILABLE", null, List.of()));
                 continue;
             }
-            boolean inUse = holds.stream().anyMatch(w -> BookingState.IN_USE.contains(w.state()));
             LocalDateTime bookedUntil = holds.stream()
                     .map(ActiveWindow::end).max(LocalDateTime::compareTo).orElse(null);
             List<ItemAvailabilityResponse.Window> windows = holds.stream()
                     .map(w -> new ItemAvailabilityResponse.Window(
                             w.start(), w.end(), w.state(), BookingState.availabilityBucket(w.state())))
                     .collect(Collectors.toList());
-            out.add(new ItemAvailabilityResponse(
-                    itemId, inUse ? "IN_USE" : "IN_PROCESS", bookedUntil, windows));
+            // Any active hold — awaiting approval or already approved — shows to students as "In use".
+            out.add(new ItemAvailabilityResponse(itemId, "IN_USE", bookedUntil, windows));
         }
         return out;
     }

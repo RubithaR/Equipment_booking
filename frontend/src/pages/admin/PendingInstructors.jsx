@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { userApi, errMsg } from '../../api';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
+const roleLabel = (r) => ({ INSTRUCTOR: 'Instructor', LECTURER: 'Lecturer', HOD: 'HOD' }[r] || r);
+
 export default function PendingInstructors() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,26 +49,27 @@ export default function PendingInstructors() {
 
   return (
     <div className="container">
-      <h1 className="page-title">Pending Instructors</h1>
-      <p className="page-sub">Review and approve instructor account requests.</p>
+      <h1 className="page-title">Pending Staff</h1>
+      <p className="page-sub">Review and approve staff account requests (Instructor / Lecturer / HOD).</p>
 
       {error && <div className="alert alert-error">{error}</div>}
       {msg && <div className="alert alert-success">{msg}</div>}
 
       {loading ? <div className="loading">Loading…</div> : (
         items.length === 0 ? (
-          <div className="empty"><div className="empty-icon">✅</div>No pending instructor requests.</div>
+          <div className="empty"><div className="empty-icon">✅</div>No pending staff requests.</div>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>#</th><th>Name</th><th>Email</th><th>Department</th><th>Phone</th><th>Actions</th></tr>
+                <tr><th>#</th><th>Name</th><th>Role</th><th>Email</th><th>Department</th><th>Phone</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {items.map((u) => (
                   <tr key={u.id}>
                     <td>{u.id}</td>
                     <td>{u.fullName}</td>
+                    <td>{roleLabel(u.role)}</td>
                     <td>{u.email}</td>
                     <td>{u.department || '—'}</td>
                     <td>{u.phoneNumber || '—'}</td>

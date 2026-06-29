@@ -6,12 +6,12 @@ import { byId, fmt } from '../../utils/format';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 const ACTIVE_UMBRELLA = new Set([
-  'SUBMITTED', 'INSTRUCTOR_REVIEWING', 'AWAITING_SUPERVISOR',
-  'SUPERVISOR_APPROVED', 'READY_FOR_COLLECTION', 'COLLECTED', 'OVERDUE',
+  'SUBMITTED', 'AWAITING_HANDLER',
+  'READY_FOR_COLLECTION', 'COLLECTED', 'OVERDUE',
 ]);
 
 const TERMINAL_LINE = new Set([
-  'INSTRUCTOR_REJECTED', 'SUPERVISOR_DECLINED', 'RETURNED', 'CANCELLED',
+  'REJECTED', 'RETURNED', 'CANCELLED',
 ]);
 
 export default function MyBookings() {

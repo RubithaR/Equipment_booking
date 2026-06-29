@@ -25,7 +25,7 @@ import AdminEquipment from './pages/admin/Equipment';
 import AdminLabs from './pages/admin/Labs';
 import AdminDepartments from './pages/admin/Departments';
 
-import SupervisorQueue from './pages/supervisor/Queue';
+import HodDashboard from './pages/hod/HodDashboard';
 
 function Shell() {
   return (
@@ -65,7 +65,8 @@ export default function App() {
           <Route path="/student/notifications" element={<Notifications />} />
         </Route>
 
-        <Route element={<ProtectedRoute roles={['INSTRUCTOR']}><Shell /></ProtectedRoute>}>
+        {/* Handler queue — instructor / lecturer / HOD can be assigned a request to handle */}
+        <Route element={<ProtectedRoute roles={['INSTRUCTOR', 'LECTURER', 'HOD']}><Shell /></ProtectedRoute>}>
           <Route path="/instructor" element={<Navigate to="/instructor/pending" replace />} />
           <Route path="/instructor/pending" element={<PendingBookings />} />
           <Route path="/instructor/students-pending" element={<PendingStudents />} />
@@ -74,10 +75,10 @@ export default function App() {
           <Route path="/instructor/notifications" element={<Notifications />} />
         </Route>
 
-        <Route element={<ProtectedRoute roles={['HOD', 'LECTURER']}><Shell /></ProtectedRoute>}>
-          <Route path="/supervisor" element={<Navigate to="/supervisor/queue" replace />} />
-          <Route path="/supervisor/queue" element={<SupervisorQueue />} />
-          <Route path="/supervisor/notifications" element={<Notifications />} />
+        {/* HOD dashboard — review student requests and assign a handler */}
+        <Route element={<ProtectedRoute roles={['HOD']}><Shell /></ProtectedRoute>}>
+          <Route path="/hod" element={<HodDashboard />} />
+          <Route path="/hod/notifications" element={<Notifications />} />
         </Route>
 
         <Route element={<ProtectedRoute roles={['MAIN_ADMIN', 'DEPT_ADMIN']}><Shell /></ProtectedRoute>}>

@@ -29,6 +29,9 @@ public class BookingAuthorizer {
                     && booking.getStudentDepartmentId().equals(actor.departmentId())) return;
             throw new AuthorizationException("Department admins only see their department's bookings");
         }
+        // The student's department HOD reviews every booking from their department.
+        if (actor.hasRole(Roles.HOD) && actor.departmentId() != null
+                && actor.departmentId().equals(booking.getStudentDepartmentId())) return;
         if (actor.userId().equals(booking.getStudentUserId())) return;
         for (BookingItem line : lines) {
             if (actor.userId().equals(line.getInstructorUserId())) return;
@@ -51,21 +54,21 @@ public class BookingAuthorizer {
         if (required == Role.SYSTEM) return;
         if (actor == null) throw new AuthenticationException("Authentication required");
         switch (required) {
-            case INSTRUCTOR_OWNER -> {
-                if (!actor.hasRole(Roles.INSTRUCTOR)) {
-                    throw new AuthorizationException("Only instructors can take this action");
+            case HOD_OF_STUDENT_DEPT -> {
+                if (!actor.hasRole(Roles.HOD)) {
+                    throw new AuthorizationException("Only the department HOD can take this action");
                 }
-                if (!actor.userId().equals(line.getInstructorUserId())) {
-                    throw new AuthorizationException("This line belongs to a different instructor");
+                if (actor.departmentId() == null
+                        || !actor.departmentId().equals(booking.getStudentDepartmentId())) {
+                    throw new AuthorizationException("You are not the HOD of this student's department");
                 }
             }
-            case SUPERVISOR_ASSIGNED -> {
-                if (!actor.hasAnyRole(Roles.HOD, Roles.LECTURER)) {
-                    throw new AuthorizationException("Only HoDs and Lecturers can take this action");
+            case HANDLER_ASSIGNED -> {
+                if (!actor.hasAnyRole(Roles.INSTRUCTOR, Roles.LECTURER, Roles.HOD)) {
+                    throw new AuthorizationException("Only assigned staff can take this action");
                 }
-                if (line.getAssignedSupervisorUserId() == null
-                        || !actor.userId().equals(line.getAssignedSupervisorUserId())) {
-                    throw new AuthorizationException("You are not the assigned supervisor for this line");
+                if (!actor.userId().equals(line.getInstructorUserId())) {
+                    throw new AuthorizationException("This line is assigned to a different handler");
                 }
             }
             case STUDENT_OWNER -> {

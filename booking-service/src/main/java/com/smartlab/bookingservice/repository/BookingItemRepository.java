@@ -27,8 +27,8 @@ public interface BookingItemRepository extends JpaRepository<BookingItem, Long> 
             SELECT bi FROM BookingItem bi
             JOIN Booking b ON b.id = bi.bookingId
             WHERE bi.itemId = :itemId
-              AND bi.state IN ('SUBMITTED','INSTRUCTOR_REVIEWING','AWAITING_SUPERVISOR',
-                               'SUPERVISOR_APPROVED','READY_FOR_COLLECTION','COLLECTED','OVERDUE')
+              AND bi.state IN ('SUBMITTED','AWAITING_HANDLER',
+                               'READY_FOR_COLLECTION','COLLECTED','OVERDUE')
               AND b.startDate < :end
               AND b.returnDate > :start
             """)
@@ -47,8 +47,8 @@ public interface BookingItemRepository extends JpaRepository<BookingItem, Long> 
             FROM BookingItem bi
             JOIN Booking b ON b.id = bi.bookingId
             WHERE bi.itemId IN :itemIds
-              AND bi.state IN ('SUBMITTED','INSTRUCTOR_REVIEWING','AWAITING_SUPERVISOR',
-                               'SUPERVISOR_APPROVED','READY_FOR_COLLECTION','COLLECTED','OVERDUE')
+              AND bi.state IN ('SUBMITTED','AWAITING_HANDLER',
+                               'READY_FOR_COLLECTION','COLLECTED','OVERDUE')
             ORDER BY b.startDate ASC
             """)
     List<ActiveWindow> findActiveWindows(@Param("itemIds") Collection<Long> itemIds);

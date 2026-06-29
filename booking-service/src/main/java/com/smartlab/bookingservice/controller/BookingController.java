@@ -51,9 +51,16 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.listForCurrentInstructor());
     }
 
-    @GetMapping("/awaiting-my-supervision")
-    public ResponseEntity<List<BookingResponse>> awaitingMySupervision() {
-        return ResponseEntity.ok(bookingService.listForCurrentSupervisor());
+    // HOD dashboard Tab 1: requests from my department awaiting my review.
+    @GetMapping("/awaiting-hod")
+    public ResponseEntity<List<BookingResponse>> awaitingHod() {
+        return ResponseEntity.ok(bookingService.listAwaitingHod());
+    }
+
+    // HOD dashboard Tab 2: requests from my department I've already processed.
+    @GetMapping("/hod-processed")
+    public ResponseEntity<List<BookingResponse>> hodProcessed() {
+        return ResponseEntity.ok(bookingService.listHodProcessed());
     }
 
     @GetMapping

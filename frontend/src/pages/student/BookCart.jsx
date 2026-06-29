@@ -68,6 +68,16 @@ export default function BookCart() {
     : [];
   const conflictIds = new Set(conflicts.map((c) => c.itemId));
 
+  // Earliest a new booking may start: after the latest "booked until" across all cart items.
+  // The booking shares one window, so it can only begin once every held item is free again.
+  const minStartIso = cart.reduce((latest, c) => {
+    const bu = availMap[c.itemId]?.bookedUntil;
+    if (!bu) return latest;
+    return (!latest || new Date(bu) > new Date(latest)) ? bu : latest;
+  }, null);
+  // datetime-local inputs need "YYYY-MM-DDTHH:mm".
+  const minStartLocal = minStartIso ? String(minStartIso).slice(0, 16) : '';
+
   // Group lines by lab so the form makes the per-instructor approval explicit.
   const groupedByLab = cart.reduce((acc, line) => {
     (acc[line.labId] = acc[line.labId] || []).push(line);
@@ -183,15 +193,23 @@ export default function BookCart() {
             </Section>
 
             <Section num="02" title="Duration" sub="Shared by every item in the booking.">
+              {minStartLocal && (
+                <div className="add-eq-empty" style={{ marginBottom: 8 }}>
+                  An item in your cart is booked — the calendar only allows a start
+                  <strong> after {fmt(minStartIso)}</strong>.
+                </div>
+              )}
               <div className="field-row">
                 <div className="field">
                   <label>Start date <span className="req">*</span></label>
                   <input type="datetime-local" value={startDate} required
+                         min={minStartLocal || undefined}
                          onChange={(e) => setStartDate(e.target.value)} />
                 </div>
                 <div className="field">
                   <label>Return date <span className="req">*</span></label>
                   <input type="datetime-local" value={returnDate} required
+                         min={startDate || minStartLocal || undefined}
                          onChange={(e) => setReturnDate(e.target.value)} />
                 </div>
               </div>
@@ -203,7 +221,7 @@ export default function BookCart() {
                       <li key={c.itemId}>
                         <strong>{c.name}</strong>
                         {availMap[c.itemId]?.bookedUntil
-                          ? ` — booked until ${fmt(availMap[c.itemId].bookedUntil)}`
+                          ? ` — booked after ${fmt(availMap[c.itemId].bookedUntil)}`
                           : ''}
                       </li>
                     ))}
@@ -288,7 +306,7 @@ export default function BookCart() {
                                 color: conflictIds.has(l.itemId) ? 'var(--danger, #c0392b)' : 'var(--muted)',
                               }}>
                                 {conflictIds.has(l.itemId) ? '⚠ Overlaps — ' : ''}
-                                booked until {fmt(availMap[l.itemId].bookedUntil)}
+                                booked after {fmt(availMap[l.itemId].bookedUntil)}
                               </div>
                             )}
                           </div>

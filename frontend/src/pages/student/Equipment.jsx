@@ -73,7 +73,6 @@ export default function Equipment() {
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="ALL">All statuses</option>
           <option value="AVAILABLE">Available</option>
-          <option value="IN_PROCESS">In process</option>
           <option value="IN_USE">In use</option>
           <option value="MAINTENANCE">Maintenance</option>
           <option value="OUT_OF_SERVICE">Out of service</option>
@@ -88,15 +87,14 @@ export default function Equipment() {
             {filtered.map((e) => {
               const adminStatus = (e.status || 'AVAILABLE').toUpperCase();
               const blocked = adminStatus === 'MAINTENANCE' || adminStatus === 'OUT_OF_SERVICE';
-              // Booking-derived bucket (in process / in use) takes over once the item is bookable.
+              // Booking-derived bucket: any active hold shows as "In use" (only two statuses).
               const bucket = bucketOf(e);
               const bookedUntil = availMap[e.id]?.bookedUntil;
 
               const statusClass = bucket === 'AVAILABLE' ? 'eq-status-ok'
-                                : (bucket === 'IN_USE' || bucket === 'IN_PROCESS') ? 'eq-status-busy'
+                                : bucket === 'IN_USE' ? 'eq-status-busy'
                                 : 'eq-status-warn';
               const statusLabel = bucket === 'IN_USE' ? 'In use'
-                                : bucket === 'IN_PROCESS' ? 'In process'
                                 : bucket === 'MAINTENANCE' ? 'Maintenance'
                                 : bucket === 'OUT_OF_SERVICE' ? 'Out of service'
                                 : 'Available';
@@ -126,9 +124,9 @@ export default function Equipment() {
                     <div>
                       <div className="eq-foot-label">Status</div>
                       <div className="eq-foot-value">{statusLabel}</div>
-                      {bookedUntil && (bucket === 'IN_USE' || bucket === 'IN_PROCESS') && (
+                      {bookedUntil && bucket === 'IN_USE' && (
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                          Booked until {fmt(bookedUntil)} — pick a later start.
+                          Booked after {fmt(bookedUntil)}
                         </div>
                       )}
                     </div>

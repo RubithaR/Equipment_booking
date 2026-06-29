@@ -19,8 +19,7 @@ export default function AdminOverview() {
           bookingApi.list(),
         ]);
         const ACTIVE = new Set([
-          'SUBMITTED', 'INSTRUCTOR_REVIEWING', 'AWAITING_SUPERVISOR',
-          'SUPERVISOR_APPROVED', 'READY_FOR_COLLECTION', 'COLLECTED',
+          'SUBMITTED', 'AWAITING_HANDLER', 'READY_FOR_COLLECTION', 'COLLECTED',
         ]);
         setStats({
           students: students.data.length,
@@ -30,7 +29,7 @@ export default function AdminOverview() {
           items: items.data.length,
           bookings: bookings.data.length,
           pendingBookings: bookings.data.filter((b) =>
-            b.state === 'SUBMITTED' || b.state === 'INSTRUCTOR_REVIEWING').length,
+            b.state === 'SUBMITTED' || b.state === 'AWAITING_HANDLER').length,
           activeBookings: bookings.data.filter((b) => ACTIVE.has(b.state)).length,
         });
       } catch (err) {

@@ -866,6 +866,9 @@ a:hover { border-bottom-color: var(--primary); }
 .badge-available, .badge-active, .badge-confirmed { background: var(--success-bg); color: var(--success); border-color: var(--success); }
 .badge-in_use, .badge-pending, .badge-pending_approval { background: var(--warning-bg); color: #7a5a13; border-color: var(--warning); }
 .badge-rejected, .badge-cancelled, .badge-maintenance { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+.badge-submitted, .badge-awaiting_handler { background: var(--warning-bg); color: #7a5a13; border-color: var(--warning); }
+.badge-ready_for_collection, .badge-collected, .badge-returned, .badge-completed { background: var(--success-bg); color: var(--success); border-color: var(--success); }
+.badge-overdue { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
 .badge-student { background: var(--role-student-bg); color: var(--role-student); border-color: var(--role-student); }
 .badge-instructor { background: var(--role-instructor-bg); color: var(--role-instructor); border-color: var(--role-instructor); }
 .badge-admin { background: var(--role-admin-bg); color: var(--role-admin); border-color: var(--role-admin); }

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { userApi, errMsg } from '../api';
 import { setSession, homePathFor } from '../auth';
 import AuthBrand from '../components/AuthBrand';
+import PasswordInput from '../components/PasswordInput';
 
 export default function Login() {
   const nav = useNavigate();
@@ -51,7 +52,7 @@ export default function Login() {
             </div>
             <div className="field">
               <label>Password</label>
-              <input type="password" value={password} required
+              <PasswordInput value={password} required
                      onChange={(e) => setPassword(e.target.value)}
                      placeholder="••••••••" />
             </div>

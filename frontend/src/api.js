@@ -107,34 +107,29 @@ export const bookingApi = {
   availability: (itemIds) =>
     api.get('/api/bookings/availability', { params: { itemIds: itemIds.join(',') } }),
   mine: () => api.get('/api/bookings/mine'),
-  assignedToMe: () => api.get('/api/bookings/assigned-to-me'),
-  awaitingMySupervision: () => api.get('/api/bookings/awaiting-my-supervision'),
+  assignedToMe: () => api.get('/api/bookings/assigned-to-me'),   // handler queue (assigned to me)
+  awaitingHod: () => api.get('/api/bookings/awaiting-hod'),      // HOD: requests awaiting my review
+  hodProcessed: () => api.get('/api/bookings/hod-processed'),    // HOD: requests I've already processed
   timeline: (id) => api.get(`/api/bookings/${id}/timeline`),
   attachments: (id) => api.get(`/api/bookings/${id}/attachments`),
 
   cancel: (id) => api.post(`/api/bookings/${id}/cancel`),
 
-  // ===== Per-line instructor actions =====
-  startReview: (bookingId, lineId) =>
-    transition(bookingId, lineId, { type: 'START_REVIEW' }),
-  approve: (bookingId, lineId, { pickupAt, pickupNote }) =>
-    transition(bookingId, lineId, { type: 'APPROVE_DIRECTLY', pickupAt, pickupNote }),
-  reject: (bookingId, lineId, reason) =>
-    transition(bookingId, lineId, { type: 'REJECT', reason }),
-  delegate: (bookingId, lineId, { supervisorUserId, note }) =>
-    transition(bookingId, lineId, { type: 'DELEGATE', supervisorUserId, note }),
-  finalise: (bookingId, lineId, { pickupAt, pickupNote }) =>
-    transition(bookingId, lineId, { type: 'FINALISE', pickupAt, pickupNote }),
+  // ===== HOD actions (first reviewer) =====
+  hodApprove: (bookingId, lineId, { handlerUserId, note }) =>
+    transition(bookingId, lineId, { type: 'HOD_APPROVE', handlerUserId, note }),
+  hodReject: (bookingId, lineId, reason) =>
+    transition(bookingId, lineId, { type: 'HOD_REJECT', reason }),
+
+  // ===== Handler actions (assigned instructor / lecturer / HOD) =====
+  handlerApprove: (bookingId, lineId, { pickupAt, pickupNote }) =>
+    transition(bookingId, lineId, { type: 'HANDLER_APPROVE', pickupAt, pickupNote }),
+  handlerReject: (bookingId, lineId, reason) =>
+    transition(bookingId, lineId, { type: 'HANDLER_REJECT', reason }),
   collect: (bookingId, lineId) =>
     transition(bookingId, lineId, { type: 'MARK_COLLECTED' }),
   markReturned: (bookingId, lineId) =>
     transition(bookingId, lineId, { type: 'MARK_RETURNED' }),
-
-  // ===== Per-line supervisor actions =====
-  supervisorApprove: (bookingId, lineId, note) =>
-    transition(bookingId, lineId, { type: 'SUPERVISOR_APPROVE', note }),
-  supervisorDecline: (bookingId, lineId, note) =>
-    transition(bookingId, lineId, { type: 'SUPERVISOR_DECLINE', note }),
 };
 
 export const notificationApi = {

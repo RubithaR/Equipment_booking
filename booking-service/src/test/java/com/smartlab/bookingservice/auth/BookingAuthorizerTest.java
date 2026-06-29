@@ -154,69 +154,65 @@ class BookingAuthorizerTest {
         @Test
         void nullActor_with_anyOtherRole_throws401() {
             BookingItem li = lineFor(INSTRUCTOR_ID, null);
-            assertThatThrownBy(() -> authorizer.requireForTransition(null, li, ownedByStudent(), Role.INSTRUCTOR_OWNER))
+            assertThatThrownBy(() -> authorizer.requireForTransition(null, li, ownedByStudent(), Role.HANDLER_ASSIGNED))
                     .isInstanceOf(AuthenticationException.class);
         }
 
+        // ===== HOD_OF_STUDENT_DEPT =====
+
         @Test
-        void instructorOwner_correctInstructor_passes() {
+        void hodOfStudentDept_correctDept_passes() {
             BookingItem li = lineFor(INSTRUCTOR_ID, null);
-            authorizer.requireForTransition(user(INSTRUCTOR_ID, Roles.INSTRUCTOR, DEPT_ID), li, ownedByStudent(), Role.INSTRUCTOR_OWNER);
+            authorizer.requireForTransition(user(OTHER_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.HOD_OF_STUDENT_DEPT);
         }
 
         @Test
-        void instructorOwner_wrongRole_throws403() {
+        void hodOfStudentDept_wrongRole_throws403() {
             BookingItem li = lineFor(INSTRUCTOR_ID, null);
             assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(INSTRUCTOR_ID, Roles.STUDENT, DEPT_ID), li, ownedByStudent(), Role.INSTRUCTOR_OWNER))
+                    user(OTHER_ID, Roles.LECTURER, DEPT_ID), li, ownedByStudent(), Role.HOD_OF_STUDENT_DEPT))
                     .isInstanceOf(AuthorizationException.class)
-                    .hasMessageContaining("Only instructors");
+                    .hasMessageContaining("department HOD");
         }
 
         @Test
-        void instructorOwner_differentInstructor_throws403() {
+        void hodOfStudentDept_differentDept_throws403() {
             BookingItem li = lineFor(INSTRUCTOR_ID, null);
             assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(OTHER_ID, Roles.INSTRUCTOR, DEPT_ID), li, ownedByStudent(), Role.INSTRUCTOR_OWNER))
+                    user(OTHER_ID, Roles.HOD, OTHER_DEPT_ID), li, ownedByStudent(), Role.HOD_OF_STUDENT_DEPT))
                     .isInstanceOf(AuthorizationException.class)
-                    .hasMessageContaining("different instructor");
+                    .hasMessageContaining("not the HOD");
+        }
+
+        // ===== HANDLER_ASSIGNED =====
+
+        @Test
+        void handlerAssigned_instructor_passes() {
+            BookingItem li = lineFor(INSTRUCTOR_ID, null);
+            authorizer.requireForTransition(user(INSTRUCTOR_ID, Roles.INSTRUCTOR, DEPT_ID), li, ownedByStudent(), Role.HANDLER_ASSIGNED);
         }
 
         @Test
-        void supervisorAssigned_HoD_passes() {
-            BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
-            authorizer.requireForTransition(user(SUPERVISOR_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED);
+        void handlerAssigned_lecturer_passes() {
+            BookingItem li = lineFor(INSTRUCTOR_ID, null);
+            authorizer.requireForTransition(user(INSTRUCTOR_ID, Roles.LECTURER, DEPT_ID), li, ownedByStudent(), Role.HANDLER_ASSIGNED);
         }
 
         @Test
-        void supervisorAssigned_Lecturer_passes() {
-            BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
-            authorizer.requireForTransition(user(SUPERVISOR_ID, Roles.LECTURER, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED);
-        }
-
-        @Test
-        void supervisorAssigned_studentRole_throws403() {
-            BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
+        void handlerAssigned_studentRole_throws403() {
+            BookingItem li = lineFor(INSTRUCTOR_ID, null);
             assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(SUPERVISOR_ID, Roles.STUDENT, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED))
+                    user(INSTRUCTOR_ID, Roles.STUDENT, DEPT_ID), li, ownedByStudent(), Role.HANDLER_ASSIGNED))
                     .isInstanceOf(AuthorizationException.class);
         }
 
         @Test
-        void supervisorAssigned_butNoSupervisorAssignedToLine_throws403() {
+        void handlerAssigned_differentUser_throws403() {
             BookingItem li = lineFor(INSTRUCTOR_ID, null);
             assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(SUPERVISOR_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED))
+                    user(OTHER_ID, Roles.INSTRUCTOR, DEPT_ID), li, ownedByStudent(), Role.HANDLER_ASSIGNED))
                     .isInstanceOf(AuthorizationException.class)
-                    .hasMessageContaining("not the assigned supervisor");
-        }
-
-        @Test
-        void supervisorAssigned_differentSupervisor_throws403() {
-            BookingItem li = lineFor(INSTRUCTOR_ID, SUPERVISOR_ID);
-            assertThatThrownBy(() -> authorizer.requireForTransition(
-                    user(OTHER_ID, Roles.HOD, DEPT_ID), li, ownedByStudent(), Role.SUPERVISOR_ASSIGNED))
-                    .isInstanceOf(AuthorizationException.class);
+                    .hasMessageContaining("different handler");
         }
 
         @Test

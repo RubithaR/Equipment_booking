@@ -50,7 +50,8 @@ public class UserService {
     public UserResponse register(UserRequest request) {
         String role = request.getRole() == null ? "" : request.getRole().toUpperCase();
         if (!Roles.SELF_REGISTERABLE.contains(role)) {
-            throw new BadRequestException("Role must be STUDENT or INSTRUCTOR (other roles are created by admins).");
+            throw new BadRequestException(
+                    "Role must be STUDENT, or a staff role (INSTRUCTOR, LECTURER, HOD). Admin roles are created by admins.");
         }
         String email = lower(request.getEmail());
         if (userRepository.existsByEmail(email)) {
@@ -109,7 +110,7 @@ public class UserService {
             user.setUniEmail(uniEmail);
             user.setStatus(STATUS_ACTIVE);
         } else {
-            // Instructor self-registration: must wait for department admin approval
+            // Staff self-registration (instructor / lecturer / HOD): wait for department admin approval
             user.setStatus(STATUS_PENDING);
         }
 
@@ -178,25 +179,27 @@ public class UserService {
                 .map(UserResponse::from).collect(Collectors.toList());
     }
 
+    /** Pending staff (instructor / lecturer / HOD) awaiting department admin approval. */
     public List<UserResponse> getPendingInstructors(Long departmentId) {
         // DEPT_ADMIN always sees only their own department, even if they pass ?departmentId=
         Long deptScope = deptScopeForCaller();
         Long effective = (deptScope != null) ? deptScope : departmentId;
         List<User> rows = (effective != null)
-                ? userRepository.findByRoleAndStatusAndDepartmentId(Roles.INSTRUCTOR, STATUS_PENDING, effective)
-                : userRepository.findByRoleAndStatus(Roles.INSTRUCTOR, STATUS_PENDING);
+                ? userRepository.findByRoleInAndStatusAndDepartmentId(Roles.STAFF, STATUS_PENDING, effective)
+                : userRepository.findByRoleInAndStatus(Roles.STAFF, STATUS_PENDING);
         return rows.stream().map(UserResponse::from).collect(Collectors.toList());
     }
 
+    /** Approve any pending staff member (instructor / lecturer / HOD). */
     public UserResponse approveInstructor(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
-        if (!Roles.INSTRUCTOR.equals(user.getRole())) {
-            throw new BadRequestException("User is not an instructor");
+        if (!Roles.STAFF.contains(user.getRole())) {
+            throw new BadRequestException("User is not a staff member");
         }
         ensureCallerCanManage(user);
         if (STATUS_ACTIVE.equals(user.getStatus())) {
-            throw new ConflictException("Instructor is already active");
+            throw new ConflictException("This account is already active");
         }
         user.setStatus(STATUS_ACTIVE);
         User saved = userRepository.save(user);
@@ -205,11 +208,12 @@ public class UserService {
         return UserResponse.from(saved);
     }
 
+    /** Reject (delete) a pending staff application. */
     public void rejectInstructor(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found with id: " + id));
-        if (!Roles.INSTRUCTOR.equals(user.getRole())) {
-            throw new BadRequestException("User is not an instructor");
+        if (!Roles.STAFF.contains(user.getRole())) {
+            throw new BadRequestException("User is not a staff member");
         }
         ensureCallerCanManage(user);
         userRepository.delete(user);

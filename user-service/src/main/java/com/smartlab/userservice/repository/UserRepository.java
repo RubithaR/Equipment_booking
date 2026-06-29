@@ -19,8 +19,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByIndexNumber(String indexNumber);
     List<User> findByRole(String role);
     List<User> findByRoleAndStatus(String role, String status);
+    List<User> findByRoleInAndStatus(Collection<String> roles, String status);
     List<User> findByRoleAndDepartmentId(String role, Long departmentId);
     List<User> findByRoleAndStatusAndDepartmentId(String role, String status, Long departmentId);
+    List<User> findByRoleInAndStatusAndDepartmentId(Collection<String> roles, String status, Long departmentId);
     List<User> findByDepartmentId(Long departmentId);
 
     @Query("""

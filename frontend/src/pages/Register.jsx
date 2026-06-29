@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { userApi, departmentApi, errMsg } from '../api';
 import AuthBrand from '../components/AuthBrand';
+import PasswordInput from '../components/PasswordInput';
 
 const STUDENT_EMAIL_RE = /^en\d{6}@foe\.sjp\.ac\.lk$/;
 const EN_NUMBER_RE = /^EN\d{6}$/;
 
 export default function Register() {
   const nav = useNavigate();
-  const [role, setRole] = useState('STUDENT');
+  const [kind, setKind] = useState('STUDENT');            // STUDENT | STAFF
+  const [staffRole, setStaffRole] = useState('INSTRUCTOR'); // HOD | LECTURER | INSTRUCTOR
+  const role = kind === 'STUDENT' ? 'STUDENT' : staffRole; // actual role sent to the API
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -115,13 +118,12 @@ export default function Register() {
         }),
       };
       await userApi.register(payload);
-      if (role === 'INSTRUCTOR') {
+      if (kind === 'STAFF') {
         setSuccess('Account created. Awaiting department admin approval — you will be notified. Redirecting to sign in…');
-        setTimeout(() => nav('/login'), 3000);
       } else {
         setSuccess('Account created. Awaiting your department instructor\'s approval — you will be notified. Redirecting to sign in…');
-        setTimeout(() => nav('/login'), 3000);
       }
+      setTimeout(() => nav('/login'), 3000);
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -152,14 +154,25 @@ export default function Register() {
 
         <div className="field">
           <label>I am registering as</label>
-          <select value={role} onChange={(e) => {
-            setRole(e.target.value);
+          <select value={kind} onChange={(e) => {
+            setKind(e.target.value);
             setEmailFmtErr('');
           }}>
             <option value="STUDENT">Student</option>
-            <option value="INSTRUCTOR">Instructor (requires department admin approval)</option>
+            <option value="STAFF">Staff (requires department admin approval)</option>
           </select>
         </div>
+
+        {kind === 'STAFF' && (
+          <div className="field">
+            <label>Staff role</label>
+            <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
+              <option value="INSTRUCTOR">Instructor</option>
+              <option value="LECTURER">Lecturer</option>
+              <option value="HOD">Head of Department (HOD)</option>
+            </select>
+          </div>
+        )}
 
         <form onSubmit={submit}>
           <div className="field-row">
@@ -247,7 +260,7 @@ export default function Register() {
 
           <div className="field">
             <label>Password</label>
-            <input type="password" value={password} required minLength={6}
+            <PasswordInput value={password} required minLength={6}
                    onChange={(e) => setPassword(e.target.value)}
                    placeholder="At least 6 characters" />
           </div>

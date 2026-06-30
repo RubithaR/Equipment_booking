@@ -106,12 +106,17 @@ function BookingCard({ booking, itemMap, labMap, onCancel }) {
       <div className="table-wrap" style={{ marginTop: 12 }}>
         <table>
           <thead>
-            <tr><th>Item</th><th>Lab</th><th>State</th><th>Pickup</th></tr>
+            <tr><th>Item</th><th>Lab</th><th>State</th><th>Pickup / Lab times</th></tr>
           </thead>
           <tbody>
             {booking.items.map((line) => {
               const it = itemMap[line.itemId];
               const lb = labMap[line.labId];
+              const labOnly = (line.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
+              const slots = line.useSlots || [];
+              const confirmed = slots.filter((s) => s.confirmed);
+              const approved = line.state === 'READY_FOR_COLLECTION' || line.state === 'COLLECTED'
+                               || line.state === 'OVERDUE' || line.state === 'RETURNED';
               return (
                 <tr key={line.id}>
                   <td>
@@ -121,7 +126,20 @@ function BookingCard({ booking, itemMap, labMap, onCancel }) {
                   <td>{lb ? lb.name : `Lab #${line.labId}`}</td>
                   <td><Badge value={line.state} /></td>
                   <td>
-                    {line.pickupAt ? fmt(line.pickupAt) : '—'}
+                    {labOnly ? (
+                      approved && confirmed.length ? (
+                        <div>
+                          <div style={{ fontSize: 12, color: 'var(--success, #1b6e4a)', fontWeight: 600 }}>Confirmed lab times:</div>
+                          {confirmed.map((s) => <div key={s.at}>✓ {fmt(s.at)}{s.to ? ` – ${fmt(s.to)}` : ''}</div>)}
+                        </div>
+                      ) : slots.length ? (
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                          Requested: {slots.map((s) => `${fmt(s.at)}${s.to ? ` – ${fmt(s.to)}` : ''}`).join(' · ')}
+                        </div>
+                      ) : '—'
+                    ) : (
+                      line.pickupAt ? fmt(line.pickupAt) : '—'
+                    )}
                     {line.pickupNote && (
                       <div style={{ fontSize: 12, color: 'var(--muted)' }}>{line.pickupNote}</div>
                     )}

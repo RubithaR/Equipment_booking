@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * One physical item attached to an umbrella booking. Each item runs its own
@@ -52,6 +53,14 @@ public class BookingItem {
     /** The lab-session time the student requested (LAB_ONLY lines only; null otherwise). */
     @Column(name = "requested_use_time")
     private LocalDateTime requestedUseTime;
+
+    /**
+     * LAB_ONLY: the proposed lab-use times. The student adds several; the handler
+     * ticks the ones they're available for (confirmed=true) at approval.
+     */
+    @Convert(converter = UseSlotListConverter.class)
+    @Column(name = "use_slots", columnDefinition = "TEXT")
+    private List<UseSlot> useSlots;
 
     @Column(nullable = false, length = 40)
     private String state;

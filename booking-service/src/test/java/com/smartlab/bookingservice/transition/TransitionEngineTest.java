@@ -179,7 +179,7 @@ class TransitionEngineTest {
         stubContextLookups();
         when(itemClient.updateStatus(eq(ITEM_ID), any())).thenReturn(new ItemDto());
 
-        BookingItem result = engine.apply(li, new Transition.HandlerApprove(pickup, "Bring your ID"), handler());
+        BookingItem result = engine.apply(li, new Transition.HandlerApprove(pickup, "Bring your ID", null), handler());
 
         assertThat(result.getState()).isEqualTo(BookingState.READY_FOR_COLLECTION);
         assertThat(result.getPickupAt()).isEqualTo(pickup);

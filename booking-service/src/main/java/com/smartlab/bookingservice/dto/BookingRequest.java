@@ -48,8 +48,21 @@ public class BookingRequest {
         @NotNull(message = "labId is required")
         private Long labId;
 
-        /** Optional lab-session time the student requests; meaningful for LAB_ONLY items. */
+        /** Legacy single lab-session time. Superseded by {@link #requestedSlots}. */
         private LocalDateTime requestedUseTime;
+
+        /** LAB_ONLY: the from-to time windows the student proposes (within the booking window). */
+        private List<SlotInput> requestedSlots;
+    }
+
+    /** A proposed lab-use window: {@code from} start to {@code to} end. */
+    @Data
+    public static class SlotInput {
+        @NotNull(message = "slot from time is required")
+        private LocalDateTime from;
+
+        @NotNull(message = "slot to time is required")
+        private LocalDateTime to;
     }
 
     @Data

@@ -123,8 +123,9 @@ export const bookingApi = {
     transition(bookingId, lineId, { type: 'HOD_REJECT', reason }),
 
   // ===== Handler actions (assigned instructor / lecturer / HOD) =====
-  handlerApprove: (bookingId, lineId, { pickupAt, pickupNote }) =>
-    transition(bookingId, lineId, { type: 'HANDLER_APPROVE', pickupAt, pickupNote }),
+  // Borrowable: pass pickupAt. Lab-only: pass confirmedSlots (the ticked times).
+  handlerApprove: (bookingId, lineId, { pickupAt, pickupNote, confirmedSlots }) =>
+    transition(bookingId, lineId, { type: 'HANDLER_APPROVE', pickupAt, pickupNote, confirmedSlots }),
   handlerReject: (bookingId, lineId, reason) =>
     transition(bookingId, lineId, { type: 'HANDLER_REJECT', reason }),
   collect: (bookingId, lineId) =>

@@ -16,13 +16,13 @@ import BookCart from './pages/student/BookCart';
 
 import PendingBookings from './pages/instructor/PendingBookings';
 import AllBookings from './pages/instructor/AllBookings';
-import InstructorAddEquipment from './pages/instructor/AddEquipment';
 import PendingStudents from './pages/instructor/PendingStudents';
 
 import AdminOverview from './pages/admin/AdminOverview';
 import PendingInstructors from './pages/admin/PendingInstructors';
 import Users from './pages/admin/Users';
 import AdminEquipment from './pages/admin/Equipment';
+import AdminAddEquipment from './pages/admin/AddEquipment';
 import AdminLabs from './pages/admin/Labs';
 import AdminDepartments from './pages/admin/Departments';
 
@@ -79,7 +79,6 @@ export default function App() {
           <Route path="/instructor/pending" element={<PendingBookings />} />
           <Route path="/instructor/students-pending" element={<PendingStudents />} />
           <Route path="/instructor/all" element={<AllBookings />} />
-          <Route path="/instructor/equipment/new" element={<InstructorAddEquipment />} />
           <Route path="/instructor/chat" element={<Chat />} />
           <Route path="/instructor/notifications" element={<Notifications />} />
         </Route>
@@ -97,6 +96,7 @@ export default function App() {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/bookings" element={<AllBookings />} />
           <Route path="/admin/equipment" element={<AdminEquipment />} />
+          <Route path="/admin/equipment/new" element={<AdminAddEquipment />} />
           <Route path="/admin/labs" element={<AdminLabs />} />
           <Route path="/admin/departments" element={<AdminDepartments />} />
           <Route path="/admin/notifications" element={<Notifications />} />

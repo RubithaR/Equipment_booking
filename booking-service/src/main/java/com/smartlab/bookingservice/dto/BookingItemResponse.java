@@ -1,10 +1,12 @@
 package com.smartlab.bookingservice.dto;
 
 import com.smartlab.bookingservice.entity.BookingItem;
+import com.smartlab.bookingservice.entity.UseSlot;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -18,6 +20,7 @@ public class BookingItemResponse {
     private Long assignedSupervisorUserId;
     private String usageType;
     private LocalDateTime requestedUseTime;
+    private List<UseSlot> useSlots;
     private String state;
     private LocalDateTime pickupAt;
     private String pickupNote;
@@ -27,7 +30,7 @@ public class BookingItemResponse {
         return new BookingItemResponse(
                 bi.getId(), bi.getBookingId(), bi.getItemId(), bi.getLabId(),
                 bi.getInstructorUserId(), bi.getAssignedHodUserId(), bi.getAssignedSupervisorUserId(),
-                bi.getUsageType(), bi.getRequestedUseTime(),
+                bi.getUsageType(), bi.getRequestedUseTime(), bi.getUseSlots(),
                 bi.getState(), bi.getPickupAt(), bi.getPickupNote(),
                 bi.getLastActorUserId());
     }

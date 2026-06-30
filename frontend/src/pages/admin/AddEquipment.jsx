@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { itemApi, labApi, errMsg } from '../../api';
-import { getCurrentUser } from '../../auth';
 import { byId } from '../../utils/format';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
@@ -26,7 +26,6 @@ const EMPTY = {
 };
 
 export default function AddEquipment() {
-  const me = getCurrentUser();
   const [labs, setLabs] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
@@ -38,8 +37,7 @@ export default function AddEquipment() {
     try {
       const { data } = await itemApi.list();
       if (isCancelled?.()) return;
-      const mine = data.filter((i) => labs.some((l) => l.id === i.labId));
-      const sorted = [...mine].sort((a, b) => (b.id || 0) - (a.id || 0)).slice(0, 5);
+      const sorted = [...data].sort((a, b) => (b.id || 0) - (a.id || 0)).slice(0, 5);
       setRecent(sorted);
     } catch {
       if (!isCancelled?.()) setRecent([]);
@@ -48,7 +46,7 @@ export default function AddEquipment() {
 
   useAsyncEffect(async (isCancelled) => {
     try {
-      const { data } = await labApi.list({ instructorUserId: me?.id });
+      const { data } = await labApi.list();
       if (isCancelled()) return;
       setLabs(data);
       if (data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
@@ -57,7 +55,7 @@ export default function AddEquipment() {
     }
   }, []);
 
-  useAsyncEffect(loadRecent, [labs]);
+  useAsyncEffect(loadRecent, []);
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
@@ -86,19 +84,19 @@ export default function AddEquipment() {
         <div>
           <h1 className="page-title">Add Lab Item</h1>
           <p className="page-sub">
-            Register a new item in one of your labs. Students can book it once its status
+            Register a new item in any lab. Students can book it once its status
             is <em>Available</em>.
           </p>
         </div>
         <div className="add-eq-badge">
           <span className="add-eq-badge-dot" />
-          Instructor · Catalogue
+          Admin · Catalogue
         </div>
       </div>
 
       {labs.length === 0 && (
         <div className="alert alert-error">
-          You don't have any labs assigned yet. Ask your department admin to assign you to a lab before adding items.
+          There are no labs yet. <Link to="/admin/labs">Create a lab</Link> before adding items.
         </div>
       )}
 
@@ -161,12 +159,6 @@ export default function AddEquipment() {
                        placeholder="C012345" />
                 <span className="field-hint">Optional — useful for tracking the physical unit.</span>
               </div>
-            </div>
-            <div className="field">
-              <label>Location <span className="req">*</span></label>
-              <input value={form.location} required onChange={set('location')}
-                     placeholder="Lab A-101" />
-              <span className="field-hint">Building + room number (free text — different from the Lab record above).</span>
             </div>
           </div>
 

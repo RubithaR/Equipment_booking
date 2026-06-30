@@ -169,9 +169,20 @@ function RequestCard({ booking, itemMap, labMap, userName, onAssign, onReject })
             {lines.map((line) => {
               const it = itemMap[line.itemId];
               const lb = labMap[line.labId];
+              const labOnly = (line.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
+              const times = (line.useSlots || []).map((s) => `${fmt(s.at)}${s.to ? ` – ${fmt(s.to)}` : ''}`);
               return (
                 <tr key={line.id}>
-                  <td>{it?.name || `#${line.itemId}`}<div style={{ fontSize: 12, color: 'var(--muted)' }}>{it?.model}</div></td>
+                  <td>
+                    {it?.name || `#${line.itemId}`}
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{it?.model}</div>
+                    {labOnly && (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                        🏫 Requested lab times:{' '}
+                        {times.length ? times.join(' · ') : '—'}
+                      </div>
+                    )}
+                  </td>
                   <td>{lb?.name || `#${line.labId}`}</td>
                   <td>{userName(lb?.instructorUserId)}</td>
                   <td style={{ display: 'flex', gap: 8 }}>

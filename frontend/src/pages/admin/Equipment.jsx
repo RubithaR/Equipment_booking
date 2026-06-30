@@ -45,9 +45,12 @@ export default function AdminEquipment() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <h1 className="page-title">Items</h1>
-          <p className="page-sub">All items across labs. Add/edit items from the instructor catalogue page.</p>
+          <p className="page-sub">All items across labs. Add new items to the catalogue here.</p>
         </div>
-        <Link to="/admin/labs" className="btn">Manage Labs</Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link to="/admin/labs" className="btn btn-secondary">Manage Labs</Link>
+          <Link to="/admin/equipment/new" className="btn">+ Add Item</Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

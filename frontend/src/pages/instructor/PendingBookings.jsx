@@ -115,7 +115,7 @@ export default function PendingBookings() {
       )}
 
       {modal && (
-        <ReviewModal action={modal.action} bookingId={modal.booking.id} lineId={modal.line.id}
+        <ReviewModal action={modal.action} bookingId={modal.booking.id} line={modal.line}
                      onClose={() => setModal(null)}
                      onSubmit={(body) => onAction(modal.action, modal.booking, modal.line, body)} />
       )}
@@ -148,19 +148,29 @@ function BookingCard({ booking, me, itemMap, labMap, studentMap, onOpen, onPlain
         <table>
           <thead>
             <tr>
-              <th>Item</th><th>Lab</th><th>State</th><th>Pickup</th><th>Actions</th>
+              <th>Item</th><th>Use</th><th>Lab</th><th>State</th><th>Pickup / Lab time</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {myLines.map((line) => {
               const it = itemMap[line.itemId];
               const lb = labMap[line.labId];
+              const labOnly = (line.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
               return (
                 <tr key={line.id}>
                   <td>{it?.name || `#${line.itemId}`}<div style={{ fontSize: 12, color: 'var(--muted)' }}>{it?.model}</div></td>
+                  <td>
+                    <span className={`eq-usage ${labOnly ? 'eq-usage-lab' : 'eq-usage-borrow'}`}>
+                      {labOnly ? 'Lab only' : 'Borrowable'}
+                    </span>
+                  </td>
                   <td>{lb?.name || `#${line.labId}`}</td>
                   <td><Badge value={line.state} /></td>
-                  <td>{line.pickupAt ? fmt(line.pickupAt) : '—'}</td>
+                  <td>
+                    {line.pickupAt ? fmt(line.pickupAt)
+                      : line.requestedUseTime ? <span style={{ color: 'var(--muted)' }}>asked: {fmt(line.requestedUseTime)}</span>
+                      : '—'}
+                  </td>
                   <td><Actions line={line} onOpen={onOpen} onPlainAction={onPlainAction} /></td>
                 </tr>
               );
@@ -194,41 +204,102 @@ function Actions({ line, onOpen, onPlainAction }) {
   return <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>;
 }
 
-function ReviewModal({ action, bookingId, lineId, onClose, onSubmit }) {
+function ReviewModal({ action, bookingId, line, onClose, onSubmit }) {
   const isApprove = action === 'approve';
+  const labOnly = (line?.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
+  const proposed = line?.useSlots || [];
   const [pickupAt, setPickupAt] = useState('');
   const [pickupNote, setPickupNote] = useState('');
+  const [ticked, setTicked] = useState(() => new Set());   // set of slot.at strings the instructor is available for
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const toggle = (at) => setTicked((prev) => {
+    const next = new Set(prev);
+    next.has(at) ? next.delete(at) : next.add(at);
+    return next;
+  });
+
   const submit = async (e) => {
     e.preventDefault();
-    if (!isApprove && !reason.trim()) { alert('Please give a reason for rejecting.'); return; }
-    setBusy(true);
-    try {
-      if (isApprove) await onSubmit({ pickupAt, pickupNote });
-      else           await onSubmit({ reason });
-    } finally { setBusy(false); }
+    if (!isApprove) {
+      if (!reason.trim()) { alert('Please give a reason for rejecting.'); return; }
+      setBusy(true);
+      try { await onSubmit({ reason }); } finally { setBusy(false); }
+      return;
+    }
+    if (labOnly) {
+      const confirmedSlots = [...ticked];
+      if (confirmedSlots.length === 0) { alert('Tick at least one time you are available for.'); return; }
+      setBusy(true);
+      try { await onSubmit({ confirmedSlots, pickupNote }); } finally { setBusy(false); }
+    } else {
+      if (!pickupAt) { alert('Set a pickup date & time.'); return; }
+      setBusy(true);
+      try { await onSubmit({ pickupAt, pickupNote }); } finally { setBusy(false); }
+    }
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>{isApprove ? 'Approve' : 'Reject'} line #{lineId} of booking #{bookingId}</h2>
+        <h2>{isApprove ? 'Approve' : 'Reject'} line #{line?.id} of booking #{bookingId}</h2>
         <form onSubmit={submit}>
           {isApprove ? (
-            <>
-              <div className="field">
-                <label>Pickup date &amp; time</label>
-                <input type="datetime-local" required value={pickupAt}
-                       onChange={(e) => setPickupAt(e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Pickup note (optional)</label>
-                <textarea rows="3" value={pickupNote}
-                          onChange={(e) => setPickupNote(e.target.value)} />
-              </div>
-            </>
+            labOnly ? (
+              <>
+                <div className="add-eq-empty" style={{ marginBottom: 8 }}>
+                  🏫 Lab-use only. Tick the times you're available — only the ticked times are sent to the student.
+                </div>
+                <div className="field">
+                  <label>Student's proposed times</label>
+                  {proposed.length === 0 ? (
+                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>The student didn't propose any times.</div>
+                  ) : (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {proposed.map((s) => {
+                        const on = ticked.has(s.at);
+                        return (
+                          <li key={s.at}>
+                            <label style={{
+                              display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+                              padding: '10px 12px', borderRadius: 8,
+                              border: `1px solid ${on ? 'var(--success, #1b6e4a)' : 'var(--border)'}`,
+                              background: on ? 'rgba(27,110,74,0.07)' : 'transparent',
+                              transition: 'background .12s, border-color .12s',
+                            }}>
+                              <input type="checkbox" checked={on} onChange={() => toggle(s.at)}
+                                     style={{ width: 16, height: 16, flex: 'none', margin: 0, accentColor: 'var(--success, #1b6e4a)' }} />
+                              <span style={{ fontSize: 14, fontWeight: on ? 600 : 400 }}>
+                                {fmt(s.at)}{s.to ? ` – ${fmt(s.to)}` : ''}
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                <div className="field">
+                  <label>Note for the student (optional)</label>
+                  <textarea rows="3" value={pickupNote}
+                            onChange={(e) => setPickupNote(e.target.value)} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="field">
+                  <label>Pickup date &amp; time</label>
+                  <input type="datetime-local" required value={pickupAt}
+                         onChange={(e) => setPickupAt(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Pickup note (optional)</label>
+                  <textarea rows="3" value={pickupNote}
+                            onChange={(e) => setPickupNote(e.target.value)} />
+                </div>
+              </>
+            )
           ) : (
             <div className="field">
               <label>Reason (visible to student)</label>

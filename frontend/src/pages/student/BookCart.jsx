@@ -14,7 +14,7 @@ export default function BookCart() {
   const [labMap, setLabMap] = useState({});                  // labId -> { name, location, instructorUserId }
   const [instructorMap, setInstructorMap] = useState({});    // userId -> UserResponse
   const [availMap, setAvailMap] = useState({});              // itemId -> { status, bookedUntil, windows }
-  const [useTimes, setUseTimes] = useState({});              // itemId -> requested lab-use time (LAB_ONLY only)
+  const [slots, setSlots] = useState({});                    // itemId -> [datetime-local strings] (LAB_ONLY only)
 
   // Form fields shared across the whole booking.
   const [projectName, setProjectName] = useState('');
@@ -81,12 +81,46 @@ export default function BookCart() {
 
   const isLabOnly = (line) => (line.usageType || 'BORROWABLE').toUpperCase() === 'LAB_ONLY';
 
+  // Per-item proposed lab-use times: a date plus a from/to time window on that date.
+  const itemSlots = (itemId) => slots[itemId] || [{ date: '', from: '', to: '' }];
+  const addSlot = (itemId) =>
+    setSlots((m) => ({ ...m, [itemId]: [...itemSlots(itemId), { date: '', from: '', to: '' }] }));
+  const updateSlot = (itemId, idx, field, val) =>
+    setSlots((m) => ({
+      ...m,
+      [itemId]: itemSlots(itemId).map((s, i) => (i === idx ? { ...s, [field]: val } : s)),
+    }));
+  const removeSlot = (itemId, idx) =>
+    setSlots((m) => {
+      const next = itemSlots(itemId).filter((_, i) => i !== idx);
+      return { ...m, [itemId]: next.length ? next : [{ date: '', from: '', to: '' }] };
+    });
+  // Complete, de-duplicated windows for an item, as { from, to } timestamps
+  // built from each slot's date + from/to times (e.g. "2026-06-30T10:00").
+  const cleanSlots = (itemId) => {
+    const seen = new Set();
+    const out = [];
+    for (const s of itemSlots(itemId)) {
+      if (!s.date || !s.from || !s.to) continue;
+      const from = `${s.date}T${s.from}`;
+      const to = `${s.date}T${s.to}`;
+      const key = `${from}|${to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ from, to });
+    }
+    return out;
+  };
+
   // Group lines by lab so the form makes the per-instructor approval explicit.
   const groupedByLab = cart.reduce((acc, line) => {
     (acc[line.labId] = acc[line.labId] || []).push(line);
     return acc;
   }, {});
   const labGroups = Object.entries(groupedByLab);
+
+  // Lab-only lines collect their proposed in-lab times in the main form (below Duration).
+  const labOnlyLines = cart.filter(isLabOnly);
 
   const addAttachment = () =>
     setAttachments([...attachments, { fileUrl: '', fileName: '', kind: 'OTHER' }]);
@@ -128,10 +162,22 @@ export default function BookCart() {
       setError(`Already booked for these dates: ${names}. Pick a later start date or remove them.`);
       return;
     }
-    // Lab-only items need the student to propose a lab-use time.
-    const missingTime = cart.find((c) => isLabOnly(c) && !useTimes[c.itemId]);
+    // Lab-only items need at least one proposed lab-use time, within the booking window.
+    const missingTime = cart.find((c) => isLabOnly(c) && cleanSlots(c.itemId).length === 0);
     if (missingTime) {
-      setError(`Pick a preferred lab-use time for "${missingTime.name}" (it's lab-use only).`);
+      setError(`Add at least one lab-use time for "${missingTime.name}" (it's lab-use only).`);
+      return;
+    }
+    const badRange = cart.find((c) => isLabOnly(c)
+      && cleanSlots(c.itemId).some((s) => new Date(s.to) <= new Date(s.from)));
+    if (badRange) {
+      setError(`Each lab-use time for "${badRange.name}" must end after it starts.`);
+      return;
+    }
+    const outOfWindow = cart.find((c) => isLabOnly(c)
+      && cleanSlots(c.itemId).some((s) => new Date(s.from) < start || new Date(s.to) > ret));
+    if (outOfWindow) {
+      setError(`Lab-use times for "${outOfWindow.name}" must fall between the start and return dates.`);
       return;
     }
 
@@ -145,7 +191,7 @@ export default function BookCart() {
         items: cart.map((c) => ({
           itemId: c.itemId,
           labId: c.labId,
-          requestedUseTime: isLabOnly(c) ? (useTimes[c.itemId] || null) : null,
+          requestedSlots: isLabOnly(c) ? cleanSlots(c.itemId) : null,
         })),
         projectName,
         purpose,
@@ -243,7 +289,61 @@ export default function BookCart() {
               )}
             </Section>
 
-            <Section num="03" title="Attachments" sub="Request letter, supervisor letter, related docs (optional).">
+            {labOnlyLines.length > 0 && (
+              <Section num="03" title="Lab-use times"
+                       sub="Lab-only items are used inside the lab. Propose one or more in-lab times for each, within your booking window.">
+                {!datesValid && (
+                  <div className="add-eq-empty" style={{ marginBottom: 8 }}>
+                    Set your start and return dates above first — lab-use times must fall within that window.
+                  </div>
+                )}
+                {labOnlyLines.map((l) => (
+                  <div key={l.itemId} className="field">
+                    <label>
+                      {l.name}
+                      {' '}<span className="eq-usage eq-usage-lab">Lab only</span>
+                      <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {l.model}</span>
+                      {' '}<span className="req">*</span>
+                    </label>
+                    {itemSlots(l.itemId).map((slot, idx) => (
+                      <div key={idx} className="field-row" style={{ gap: 6, marginBottom: 6, alignItems: 'flex-end' }}>
+                        <div className="field" style={{ flex: 1.4, margin: 0 }}>
+                          <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>Date</label>
+                          <input type="date" value={slot.date}
+                                 min={startDate ? startDate.slice(0, 10) : undefined}
+                                 max={returnDate ? returnDate.slice(0, 10) : undefined}
+                                 disabled={!datesValid}
+                                 onChange={(e) => updateSlot(l.itemId, idx, 'date', e.target.value)} />
+                        </div>
+                        <div className="field" style={{ flex: 1, margin: 0 }}>
+                          <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>From</label>
+                          <input type="time" value={slot.from}
+                                 disabled={!datesValid}
+                                 onChange={(e) => updateSlot(l.itemId, idx, 'from', e.target.value)} />
+                        </div>
+                        <div className="field" style={{ flex: 1, margin: 0 }}>
+                          <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>To</label>
+                          <input type="time" value={slot.to}
+                                 min={slot.from || undefined}
+                                 disabled={!datesValid}
+                                 onChange={(e) => updateSlot(l.itemId, idx, 'to', e.target.value)} />
+                        </div>
+                        <button type="button" className="btn btn-secondary btn-sm"
+                                title="Remove this time"
+                                onClick={() => removeSlot(l.itemId, idx)}>Remove time</button>
+                      </div>
+                    ))}
+                    <button type="button" className="btn-pill btn-pill-ghost btn-pill-sm"
+                            disabled={!datesValid}
+                            onClick={() => addSlot(l.itemId)}>
+                      + Add time
+                    </button>
+                  </div>
+                ))}
+              </Section>
+            )}
+
+            <Section num={labOnlyLines.length > 0 ? '04' : '03'} title="Attachments" sub="Request letter, supervisor letter, related docs (optional).">
               {attachments.length === 0 && (
                 <div className="add-eq-empty" style={{ marginBottom: 8 }}>
                   Paste a link to your file (Drive, Dropbox, etc.). Direct upload coming soon.
@@ -333,10 +433,10 @@ export default function BookCart() {
                             </button>
                           </div>
                           {isLabOnly(l) && (
-                            <div className="field" style={{ marginTop: 6 }}>
-                              <label style={{ fontSize: 12 }}>Preferred lab-use time <span className="req">*</span></label>
-                              <input type="datetime-local" value={useTimes[l.itemId] || ''}
-                                     onChange={(e) => setUseTimes((m) => ({ ...m, [l.itemId]: e.target.value }))} />
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                              {cleanSlots(l.itemId).length > 0
+                                ? `${cleanSlots(l.itemId).length} lab-use time${cleanSlots(l.itemId).length === 1 ? '' : 's'} added`
+                                : 'Add lab-use times below ↓'}
                             </div>
                           )}
                         </li>

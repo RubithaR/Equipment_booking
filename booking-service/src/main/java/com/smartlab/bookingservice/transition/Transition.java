@@ -4,10 +4,14 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.smartlab.bookingservice.entity.BookingItem;
 import com.smartlab.bookingservice.entity.BookingState;
+import com.smartlab.bookingservice.entity.UseSlot;
 import com.smartlab.security.ItemStatus;
+import com.smartlab.security.UsageType;
+import com.smartlab.security.exception.BadRequestException;
 import com.smartlab.bookingservice.notifier.NotificationEvent;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -89,12 +93,39 @@ public sealed interface Transition permits
         }
     }
 
-    /** The assigned handler approves and sets pickup details — item becomes ready to collect. */
-    record HandlerApprove(LocalDateTime pickupAt, String pickupNote) implements Transition {
+    /**
+     * The assigned handler approves. Borrowable items get a pickup time. LAB_ONLY
+     * items get the times the handler ticked from the student's proposed slots —
+     * those become the confirmed lab-use times shown back to the student.
+     */
+    record HandlerApprove(LocalDateTime pickupAt, String pickupNote, List<LocalDateTime> confirmedSlots)
+            implements Transition {
         public Set<String> fromStates() { return Set.of(BookingState.AWAITING_HANDLER); }
         public String toState()         { return BookingState.READY_FOR_COLLECTION; }
         public Role requiredRole()      { return Role.HANDLER_ASSIGNED; }
-        public void mutate(BookingItem l) { l.setPickupAt(pickupAt); l.setPickupNote(pickupNote); }
+        public void mutate(BookingItem l) {
+            if (UsageType.LAB_ONLY.equals(l.getUsageType())) {
+                if (confirmedSlots == null || confirmedSlots.isEmpty()) {
+                    throw new BadRequestException("Tick at least one available time to confirm.");
+                }
+                List<UseSlot> slots = l.getUseSlots() != null ? l.getUseSlots() : new ArrayList<>();
+                for (UseSlot s : slots) {
+                    s.setConfirmed(confirmedSlots.contains(s.getAt()));
+                }
+                // Legacy / no proposed slots: adopt the handler's confirmed times directly.
+                if (slots.stream().noneMatch(UseSlot::isConfirmed)) {
+                    slots = new ArrayList<>();
+                    for (LocalDateTime t : confirmedSlots) slots.add(new UseSlot(t, true));
+                }
+                l.setUseSlots(slots);
+                l.setPickupAt(slots.stream().filter(UseSlot::isConfirmed)
+                        .map(UseSlot::getAt).min(LocalDateTime::compareTo).orElse(null));
+                l.setPickupNote(pickupNote);
+            } else {
+                l.setPickupAt(pickupAt);
+                l.setPickupNote(pickupNote);
+            }
+        }
         public Optional<String> itemStatusFlip(String fromState) { return Optional.of(ItemStatus.IN_USE); }
         public List<NotificationEvent> notifications(TransitionContext c) {
             return List.of(new NotificationEvent.ReadyForCollection(
@@ -102,7 +133,7 @@ public sealed interface Transition permits
                     c.itemName(), c.instructorName(),
                     c.instructor() != null ? c.instructor().getEmail() : "",
                     c.instructor() != null ? c.instructor().getPhoneNumber() : null,
-                    pickupAt, pickupNote));
+                    c.line().getPickupAt(), pickupNote));
         }
     }
 

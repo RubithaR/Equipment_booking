@@ -11,6 +11,7 @@ import com.smartlab.bookingservice.entity.BookingAttachment;
 import com.smartlab.bookingservice.entity.BookingEvent;
 import com.smartlab.bookingservice.entity.BookingItem;
 import com.smartlab.bookingservice.entity.BookingState;
+import com.smartlab.bookingservice.entity.UseSlot;
 import com.smartlab.security.ItemStatus;
 import com.smartlab.security.exception.AuthorizationException;
 import com.smartlab.security.exception.BadRequestException;
@@ -115,7 +116,7 @@ public class BookingService {
                                 + " (booking #" + c.getBookingId() + ", state " + c.getState() + ")");
             }
 
-            resolved.add(new ResolvedLine(item, lab, line.getRequestedUseTime()));
+            resolved.add(new ResolvedLine(item, lab, line.getRequestedUseTime(), line.getRequestedSlots()));
         }
 
         Booking b = new Booking();
@@ -138,7 +139,19 @@ public class BookingService {
             bi.setInstructorUserId(r.lab.getInstructorUserId());
             // Snapshot the item's usage type (borrowable / lab-only) at submission.
             bi.setUsageType(r.item.getUsageType() != null ? r.item.getUsageType() : "BORROWABLE");
-            bi.setRequestedUseTime(r.requestedUseTime());
+            // Proposed lab-use slots: prefer the multi-slot from-to list, fall back to the single legacy time.
+            List<UseSlot> proposed;
+            if (r.requestedSlots() != null && !r.requestedSlots().isEmpty()) {
+                proposed = r.requestedSlots().stream()
+                        .map(s -> new UseSlot(s.getFrom(), s.getTo(), false))
+                        .collect(Collectors.toList());
+            } else if (r.requestedUseTime() != null) {
+                proposed = List.of(new UseSlot(r.requestedUseTime(), false));
+            } else {
+                proposed = List.of();
+            }
+            bi.setUseSlots(proposed);
+            bi.setRequestedUseTime(proposed.isEmpty() ? null : proposed.get(0).getAt());
             bi.setState(BookingState.SUBMITTED);
             bi.setLastActorUserId(me.userId());
             BookingItem saved = itemRepository.save(bi);
@@ -370,5 +383,7 @@ public class BookingService {
         catch (Exception ex) { log.warn("user lookup failed id={}", id, ex); return null; }
     }
 
-    private record ResolvedLine(ItemDto item, LabDto lab, java.time.LocalDateTime requestedUseTime) {}
+    private record ResolvedLine(ItemDto item, LabDto lab,
+                                java.time.LocalDateTime requestedUseTime,
+                                List<BookingRequest.SlotInput> requestedSlots) {}
 }

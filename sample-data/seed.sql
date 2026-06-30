@@ -2,8 +2,8 @@
 -- Smart Lab — Sample Data
 -- ----------------------------------------------------------------------------
 -- Seeds 14 sample users (HoDs, Lecturers, Instructors, Students), 4 labs,
--- 12 items, 7 bookings (one in each lifecycle state), and a handful of
--- notifications.
+-- 16 items (10 borrowable + 6 lab-only), 7 bookings (one in each lifecycle
+-- state), and a handful of notifications.
 --
 -- How to run:
 --   1) Make sure all 4 services have started at least once so Flyway has
@@ -151,30 +151,38 @@ FROM (VALUES
 -- ============================================================================
 
 INSERT INTO equipment.items
-  (lab_id, model, name, category, serial_number, status, description)
+  (lab_id, model, name, category, serial_number, status, description, usage_type)
 SELECT (SELECT id FROM equipment.labs WHERE name = v.lab_name),
-       v.model, v.name, v.category, v.serial, v.status, v.description
+       v.model, v.name, v.category, v.serial, v.status, v.description, v.usage_type
 FROM (VALUES
   -- Sample Computer Lab A
-  ('Sample Computer Lab A', 'Raspberry Pi 5 8GB',  'Raspberry Pi Kit #1', 'Computing',    'SAMPLE-RPI-01', 'AVAILABLE',   'RPi 5 + camera + sensor pack'),
-  ('Sample Computer Lab A', 'Raspberry Pi 5 8GB',  'Raspberry Pi Kit #2', 'Computing',    'SAMPLE-RPI-02', 'IN_USE',      'RPi 5 + camera + sensor pack'),
-  ('Sample Computer Lab A', 'NVIDIA Jetson Nano',  'Jetson Nano Devkit',  'Computing',    'SAMPLE-JTN-01', 'AVAILABLE',   'For ML / vision projects'),
-  ('Sample Computer Lab A', 'Arduino Uno R4',      'Arduino Starter Kit', 'Electronics',  'SAMPLE-ARD-01', 'AVAILABLE',   'Uno R4 with sensor shield'),
+  ('Sample Computer Lab A', 'Raspberry Pi 5 8GB',  'Raspberry Pi Kit #1', 'Computing',    'SAMPLE-RPI-01', 'AVAILABLE',   'RPi 5 + camera + sensor pack',          'BORROWABLE'),
+  ('Sample Computer Lab A', 'Raspberry Pi 5 8GB',  'Raspberry Pi Kit #2', 'Computing',    'SAMPLE-RPI-02', 'IN_USE',      'RPi 5 + camera + sensor pack',          'BORROWABLE'),
+  ('Sample Computer Lab A', 'NVIDIA Jetson Nano',  'Jetson Nano Devkit',  'Computing',    'SAMPLE-JTN-01', 'AVAILABLE',   'For ML / vision projects — used in the lab', 'LAB_ONLY'),
+  ('Sample Computer Lab A', 'Arduino Uno R4',      'Arduino Starter Kit', 'Electronics',  'SAMPLE-ARD-01', 'AVAILABLE',   'Uno R4 with sensor shield — used in the lab', 'LAB_ONLY'),
+  -- Lab-only: a heavy GPU workstation used in the lab at a confirmed time
+  ('Sample Computer Lab A', 'Dell Precision 7960', 'GPU Workstation',     'Computing',    'SAMPLE-WGPU-01','AVAILABLE',   'Dual RTX 6000 — train models in the lab','LAB_ONLY'),
 
   -- Sample Electronics Lab B
-  ('Sample Electronics Lab B', 'Tektronix TBS1052B', 'Oscilloscope #1',     'Electronics', 'SAMPLE-OSC-01', 'AVAILABLE',   '50 MHz, 1 GS/s, two channels'),
-  ('Sample Electronics Lab B', 'Tektronix TBS1052B', 'Oscilloscope #2',     'Electronics', 'SAMPLE-OSC-02', 'MAINTENANCE', 'Channel 2 calibration drift'),
-  ('Sample Electronics Lab B', 'Rigol DG1022',       'Function Generator',  'Electronics', 'SAMPLE-FNG-01', 'AVAILABLE',   '20 MHz arbitrary / function generator'),
-  ('Sample Electronics Lab B', 'NI USB-6009',        'DAQ Module',          'Electronics', 'SAMPLE-DAQ-01', 'AVAILABLE',   'Multifunction DAQ, 14-bit'),
+  ('Sample Electronics Lab B', 'Tektronix TBS1052B', 'Oscilloscope #1',     'Electronics', 'SAMPLE-OSC-01', 'AVAILABLE',   '50 MHz, 1 GS/s, two channels',          'BORROWABLE'),
+  ('Sample Electronics Lab B', 'Tektronix TBS1052B', 'Oscilloscope #2',     'Electronics', 'SAMPLE-OSC-02', 'MAINTENANCE', 'Channel 2 calibration drift',           'BORROWABLE'),
+  ('Sample Electronics Lab B', 'Rigol DG1022',       'Function Generator',  'Electronics', 'SAMPLE-FNG-01', 'AVAILABLE',   '20 MHz arbitrary / function generator', 'BORROWABLE'),
+  ('Sample Electronics Lab B', 'NI USB-6009',        'DAQ Module',          'Electronics', 'SAMPLE-DAQ-01', 'AVAILABLE',   'Multifunction DAQ, 14-bit',             'BORROWABLE'),
+  -- Lab-only: a benchtop spectrum analyzer that stays in the lab
+  ('Sample Electronics Lab B', 'Keysight N9320B',    'Spectrum Analyzer',   'Electronics', 'SAMPLE-SPA-01', 'AVAILABLE',   '9 kHz–3 GHz — bench use in the EE lab', 'LAB_ONLY'),
 
   -- Sample Mechanical Workshop
-  ('Sample Mechanical Workshop', 'Prusa MK4',     '3D Printer #1',           'Mechanical',    'SAMPLE-PRT-01', 'AVAILABLE',   'PLA / PETG, 250x210x220 mm bed'),
-  ('Sample Mechanical Workshop', 'Glowforge Pro', 'Laser Cutter',            'Manufacturing', 'SAMPLE-LSR-01', 'AVAILABLE',   '45W laser, 28x36 cm bed'),
-  ('Sample Mechanical Workshop', 'Tormach 770M',  'CNC Mill',                'Manufacturing', 'SAMPLE-CNC-01', 'OUT_OF_SERVICE', 'Spindle motor failure — repair pending'),
+  ('Sample Mechanical Workshop', 'Prusa MK4',     '3D Printer #1',           'Mechanical',    'SAMPLE-PRT-01', 'AVAILABLE',   'PLA / PETG, 250x210x220 mm bed',     'BORROWABLE'),
+  ('Sample Mechanical Workshop', 'Glowforge Pro', 'Laser Cutter',            'Manufacturing', 'SAMPLE-LSR-01', 'AVAILABLE',   '45W laser, 28x36 cm bed',            'BORROWABLE'),
+  ('Sample Mechanical Workshop', 'Tormach 770M',  'CNC Mill',                'Manufacturing', 'SAMPLE-CNC-01', 'OUT_OF_SERVICE', 'Spindle motor failure — repair pending', 'BORROWABLE'),
+  -- Lab-only: CNC lathe operated only under supervision in the workshop
+  ('Sample Mechanical Workshop', 'Haas TL-1',     'CNC Lathe Station',       'Manufacturing', 'SAMPLE-LTH-01', 'AVAILABLE',   'Supervised use only — book a workshop slot', 'LAB_ONLY'),
 
   -- Sample Civil Materials Lab
-  ('Sample Civil Materials Lab', 'Instron 5985',   'Universal Testing Machine','Civil',     'SAMPLE-UTM-01', 'AVAILABLE',   'Up to 250 kN tension/compression')
-) AS v(lab_name, model, name, category, serial, status, description);
+  ('Sample Civil Materials Lab', 'Instron 5985',   'Universal Testing Machine','Civil',     'SAMPLE-UTM-01', 'AVAILABLE',   'Up to 250 kN tension/compression',   'BORROWABLE'),
+  -- Lab-only: compression tester fixed to the lab floor
+  ('Sample Civil Materials Lab', 'ELE ADR-Auto',   'Concrete Compression Tester','Civil',  'SAMPLE-CCT-01', 'AVAILABLE',   '2000 kN — used in the materials lab', 'LAB_ONLY')
+) AS v(lab_name, model, name, category, serial, status, description, usage_type);
 
 
 -- ============================================================================
@@ -414,7 +422,7 @@ FROM (VALUES
 -- ============================================================================
 --   users.users         : +14 sample rows  (plus your existing admins)
 --   equipment.labs      : 4
---   equipment.items     : 12
+--   equipment.items     : 16  (10 borrowable + 6 lab-only)
 --   bookings.bookings   : 7
 --   bookings.booking_items : 7
 --   bookings.booking_events : 28

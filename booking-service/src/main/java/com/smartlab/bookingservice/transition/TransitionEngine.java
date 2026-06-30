@@ -18,6 +18,7 @@ import com.smartlab.notificationclient.Notifier;
 import com.smartlab.bookingservice.repository.BookingEventRepository;
 import com.smartlab.bookingservice.repository.BookingItemRepository;
 import com.smartlab.bookingservice.repository.BookingRepository;
+import com.smartlab.bookingservice.service.ChatService;
 import com.smartlab.security.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -51,6 +52,7 @@ public class TransitionEngine {
     private final LabClient labClient;
     private final Notifier<NotificationEvent> notifier;
     private final BookingAuthorizer authorizer;
+    private final ChatService chatService;
 
     @Transactional
     public BookingItem apply(Long bookingId, Long lineId, Transition t, UserContext actor) {
@@ -91,6 +93,18 @@ public class TransitionEngine {
             TransitionContext ctx = buildContext(booking, saved, fromState, actor);
             for (NotificationEvent ev : t.notifications(ctx)) {
                 notifier.publish(ev);
+            }
+        }
+
+        // The instructor just approved this line — open the student↔instructor chat so they
+        // can coordinate pickup/return. Best-effort: a chat hiccup must never fail an approval.
+        if (BookingState.READY_FOR_COLLECTION.equals(t.toState())) {
+            try {
+                chatService.openConversation(
+                        booking.getId(), booking.getStudentUserId(), saved.getInstructorUserId());
+            } catch (Exception ex) {
+                log.warn("chat.open.failed booking={} instructor={}: {}",
+                        booking.getId(), saved.getInstructorUserId(), ex.getMessage());
             }
         }
         return saved;

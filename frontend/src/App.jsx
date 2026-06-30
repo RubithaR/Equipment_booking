@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Terms from './pages/Terms';
 import Notifications from './pages/Notifications';
+import Chat from './pages/Chat';
 
 import StudentEquipment from './pages/student/Equipment';
 import MyBookings from './pages/student/MyBookings';
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/student/equipment" element={<StudentEquipment />} />
           <Route path="/student/cart" element={<BookCart />} />
           <Route path="/student/bookings" element={<MyBookings />} />
+          <Route path="/student/chat" element={<Chat />} />
           <Route path="/student/notifications" element={<Notifications />} />
         </Route>
 
@@ -78,12 +80,14 @@ export default function App() {
           <Route path="/instructor/students-pending" element={<PendingStudents />} />
           <Route path="/instructor/all" element={<AllBookings />} />
           <Route path="/instructor/equipment/new" element={<InstructorAddEquipment />} />
+          <Route path="/instructor/chat" element={<Chat />} />
           <Route path="/instructor/notifications" element={<Notifications />} />
         </Route>
 
         {/* HOD dashboard — review student requests and assign a handler */}
         <Route element={<ProtectedRoute roles={['HOD']}><Shell /></ProtectedRoute>}>
           <Route path="/hod" element={<HodDashboard />} />
+          <Route path="/hod/chat" element={<Chat />} />
           <Route path="/hod/notifications" element={<Notifications />} />
         </Route>
 

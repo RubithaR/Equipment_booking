@@ -51,6 +51,7 @@ export default function NavBar() {
                 Cart{cartCount > 0 ? ` (${cartCount})` : ''}
               </NavLink>
               <NavLink to="/student/bookings">My Bookings</NavLink>
+              <NavLink to="/student/chat">Messages</NavLink>
               <NavLink to="/student/notifications">Notifications</NavLink>
             </>
           )}
@@ -59,6 +60,7 @@ export default function NavBar() {
               <NavLink to="/instructor/equipment/new">Add Equipment</NavLink>
               <NavLink to="/instructor/pending">My Tasks</NavLink>
               <NavLink to="/instructor/all">All Bookings</NavLink>
+              <NavLink to="/instructor/chat">Messages</NavLink>
               <NavLink to="/instructor/notifications">Notifications</NavLink>
             </>
           )}
@@ -67,6 +69,7 @@ export default function NavBar() {
               <NavLink to="/instructor/students-pending">Pending Students</NavLink>
               <NavLink to="/instructor/pending">My Tasks</NavLink>
               <NavLink to="/instructor/all">All Bookings</NavLink>
+              <NavLink to="/instructor/chat">Messages</NavLink>
               <NavLink to="/instructor/notifications">Notifications</NavLink>
             </>
           )}
@@ -74,6 +77,7 @@ export default function NavBar() {
             <>
               <NavLink to="/hod">Review Requests</NavLink>
               <NavLink to="/instructor/pending">My Tasks</NavLink>
+              <NavLink to="/hod/chat">Messages</NavLink>
               <NavLink to="/hod/notifications">Notifications</NavLink>
             </>
           )}

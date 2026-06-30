@@ -140,4 +140,12 @@ export const notificationApi = {
   remove: (id) => api.delete(`/api/notifications/${id}`),
 };
 
+// Permanent student ↔ instructor chat. A thread opens automatically once an
+// instructor approves the student's request; both sides read and post here.
+export const chatApi = {
+  listMine: () => api.get('/api/chats'),
+  messages: (conversationId) => api.get(`/api/chats/${conversationId}/messages`),
+  send: (conversationId, body) => api.post(`/api/chats/${conversationId}/messages`, { body }),
+};
+
 export default api;

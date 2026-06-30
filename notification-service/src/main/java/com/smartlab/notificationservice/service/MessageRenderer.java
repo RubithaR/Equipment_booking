@@ -153,6 +153,11 @@ public class MessageRenderer {
                             + " has not returned " + str(p, "itemName")
                             + " (due " + str(p, "returnDate") + ").");
 
+            case "CHAT_MESSAGE" -> new Rendered(
+                    "New message from " + str(p, "senderName"),
+                    str(p, "senderName") + " sent you a message about booking #"
+                            + str(p, "bookingId") + ": \"" + str(p, "preview") + "\"");
+
             case "INSTRUCTOR_ACCOUNT_APPROVED" -> new Rendered(
                     "Instructor account approved",
                     "Your account has been approved by admin. You can now log in.");

@@ -17,7 +17,8 @@ public sealed interface NotificationEvent permits
         NotificationEvent.ItemRejected,
         NotificationEvent.BookingCancelled,
         NotificationEvent.OverdueToStudent,
-        NotificationEvent.OverdueToInstructor {
+        NotificationEvent.OverdueToInstructor,
+        NotificationEvent.ChatMessageSent {
 
     record SubmittedAckToStudent(
             Long bookingId,
@@ -111,4 +112,11 @@ public sealed interface NotificationEvent permits
             String studentFullName,
             String itemName,
             LocalDateTime returnDate) implements NotificationEvent {}
+
+    /** The other party sent a chat message; let the recipient know in their notifications. */
+    record ChatMessageSent(
+            Long recipientUserId,
+            Long bookingId,
+            String senderName,
+            String preview) implements NotificationEvent {}
 }

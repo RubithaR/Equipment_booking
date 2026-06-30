@@ -117,6 +117,14 @@ public class FeignNotifier implements Notifier<NotificationEvent> {
                             "studentFullName", e.studentFullName(),
                             "itemName",        e.itemName(),
                             "returnDate",      str(e.returnDate())));
+
+            case NotificationEvent.ChatMessageSent e -> {
+                Map<String, Object> p = new HashMap<>();
+                p.put("bookingId",  e.bookingId());
+                p.put("senderName", e.senderName());
+                p.put("preview",    e.preview());
+                dispatch(e.recipientUserId(), "CHAT_MESSAGE", p);
+            }
         }
     }
 

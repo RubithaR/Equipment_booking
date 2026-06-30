@@ -1,15 +1,17 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { itemApi, labApi, errMsg } from '../../api';
 import Badge from '../../components/Badge';
 import { byId } from '../../utils/format';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
 export default function AdminEquipment() {
+  const location = useLocation();
   const [items, setItems] = useState([]);
   const [labs, setLabs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [flash, setFlash] = useState(location.state?.flash || '');
 
   const load = async (isCancelled) => {
     setLoading(true);
@@ -27,6 +29,12 @@ export default function AdminEquipment() {
   };
 
   useAsyncEffect(load, []);
+
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(''), 5000);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   const labLookup = byId(labs);
 
@@ -53,6 +61,7 @@ export default function AdminEquipment() {
         </div>
       </div>
 
+      {flash && <div className="alert alert-success">{flash}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
       {loading ? <div className="loading">Loading…</div> : (
@@ -68,11 +77,11 @@ export default function AdminEquipment() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((e) => {
+                {[...items].sort((a, b) => a.id - b.id).map((e, i) => {
                   const lab = labLookup[e.labId];
                   return (
                     <tr key={e.id}>
-                      <td>{e.id}</td>
+                      <td>{i + 1}</td>
                       <td>{e.name}<div style={{ fontSize: 12, color: 'var(--muted)' }}>{e.description}</div></td>
                       <td>{e.model}</td>
                       <td>{e.category}</td>
@@ -85,7 +94,10 @@ export default function AdminEquipment() {
                       </td>
                       <td><Badge value={e.status} /></td>
                       <td>
-                        <button className="btn btn-danger btn-sm" onClick={() => remove(e)}>Delete</button>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <Link to={`/admin/equipment/${e.id}/edit`} className="btn btn-secondary btn-sm">Edit</Link>
+                          <button className="btn btn-danger btn-sm" onClick={() => remove(e)}>Delete</button>
+                        </div>
                       </td>
                     </tr>
                   );

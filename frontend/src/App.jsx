@@ -97,6 +97,7 @@ export default function App() {
           <Route path="/admin/bookings" element={<AllBookings />} />
           <Route path="/admin/equipment" element={<AdminEquipment />} />
           <Route path="/admin/equipment/new" element={<AdminAddEquipment />} />
+          <Route path="/admin/equipment/:id/edit" element={<AdminAddEquipment />} />
           <Route path="/admin/labs" element={<AdminLabs />} />
           <Route path="/admin/departments" element={<AdminDepartments />} />
           <Route path="/admin/notifications" element={<Notifications />} />

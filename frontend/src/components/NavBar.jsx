@@ -75,7 +75,6 @@ export default function NavBar() {
           {role === 'HOD' && (
             <>
               <NavLink to="/hod">Review Requests</NavLink>
-              <NavLink to="/instructor/pending">My Tasks</NavLink>
               <NavLink to="/hod/chat">Messages</NavLink>
               <NavLink to="/hod/notifications">Notifications</NavLink>
             </>

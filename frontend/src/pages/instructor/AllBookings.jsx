@@ -5,12 +5,17 @@ import Badge from '../../components/Badge';
 import { fmt } from '../../utils/format';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
 
-const STATES = [
-  'ALL',
-  'SUBMITTED', 'AWAITING_HANDLER',
-  'READY_FOR_COLLECTION', 'COLLECTED', 'RETURNED', 'OVERDUE',
-  'REJECTED', 'CANCELLED', 'COMPLETED',
+// Lifecycle categories — each tab groups the booking umbrella states that belong together.
+// `states: null` means "match everything" (the All tab). `color`/`tint` drive the box accent.
+const TAB_GROUPS = [
+  { key: 'ALL',         label: 'All',                  states: null,                                            color: '#1e4d8b', tint: '#dbe7f5' },
+  { key: 'IN_PROGRESS', label: 'In progress',          states: ['SUBMITTED', 'AWAITING_HANDLER'],               color: '#b8822a', tint: '#f5e4c1' },
+  { key: 'IN_USE',      label: 'In use',               states: ['READY_FOR_COLLECTION', 'COLLECTED', 'OVERDUE'], color: '#0891b2', tint: '#d6eef3' },
+  { key: 'COMPLETED',   label: 'Completed',            states: ['RETURNED', 'COMPLETED'],                       color: '#1b6e4a', tint: '#cce5d8' },
+  { key: 'CLOSED',      label: 'Rejected / Cancelled', states: ['REJECTED', 'CANCELLED'],                       color: '#9b1c1c', tint: '#f5d0d0' },
 ];
+
+const inTab = (group, state) => group.states === null || group.states.includes(state);
 
 export default function AllBookings() {
   const admin = isAdmin();
@@ -19,7 +24,7 @@ export default function AllBookings() {
   const [studentMap, setStudentMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('ALL');
+  const [tab, setTab] = useState('ALL');
 
   useAsyncEffect(async (isCancelled) => {
     try {
@@ -42,9 +47,11 @@ export default function AllBookings() {
     }
   }, []);
 
+  const activeGroup = TAB_GROUPS.find((g) => g.key === tab) || TAB_GROUPS[0];
   const visible = bookings
-    .filter((b) => filter === 'ALL' || b.state === filter)
+    .filter((b) => inTab(activeGroup, b.state))
     .sort((a, b) => b.id - a.id);
+  const countFor = (group) => bookings.filter((b) => inTab(group, b.state)).length;
 
   return (
     <div className="container">
@@ -53,10 +60,17 @@ export default function AllBookings() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="filter-bar">
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          {STATES.map((s) => <option key={s} value={s}>{s === 'ALL' ? 'All states' : s}</option>)}
-        </select>
+      <div className="cat-tabs">
+        {TAB_GROUPS.map((g) => (
+          <button key={g.key}
+                  type="button"
+                  style={{ '--cat': g.color, '--cat-bg': g.tint }}
+                  className={`cat-box ${tab === g.key ? 'active' : ''}`}
+                  onClick={() => setTab(g.key)}>
+            <span className="cat-count">{countFor(g)}</span>
+            <span className="cat-label">{g.label}</span>
+          </button>
+        ))}
       </div>
 
       {loading ? <div className="loading">Loading…</div> : (

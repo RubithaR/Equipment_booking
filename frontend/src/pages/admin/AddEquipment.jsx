@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { itemApi, labApi, errMsg } from '../../api';
 import { byId } from '../../utils/format';
 import { useAsyncEffect } from '../../hooks/useAsyncEffect';
@@ -23,15 +23,42 @@ const EMPTY = {
   status: 'AVAILABLE',
   usageType: 'BORROWABLE',
   description: '',
+  conditionNote: '',   // not edited in the UI, but carried through so updates don't wipe it
 };
 
 export default function AddEquipment() {
+  const { id } = useParams();
+  const isEdit = Boolean(id);
+  const navigate = useNavigate();
+
   const [labs, setLabs] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [recent, setRecent] = useState([]);
+
+  // Edit mode — load the item being edited and populate the form.
+  useAsyncEffect(async (isCancelled) => {
+    if (!id) return;
+    try {
+      const { data } = await itemApi.get(id);
+      if (isCancelled()) return;
+      setForm({
+        labId: data.labId ?? '',
+        model: data.model ?? '',
+        name: data.name ?? '',
+        category: data.category ?? '',
+        serialNumber: data.serialNumber ?? '',
+        status: data.status ?? 'AVAILABLE',
+        usageType: data.usageType ?? 'BORROWABLE',
+        description: data.description ?? '',
+        conditionNote: data.conditionNote ?? '',
+      });
+    } catch (err) {
+      if (!isCancelled()) setError(errMsg(err));
+    }
+  }, [id]);
 
   const loadRecent = async (isCancelled) => {
     try {
@@ -49,7 +76,7 @@ export default function AddEquipment() {
       const { data } = await labApi.list();
       if (isCancelled()) return;
       setLabs(data);
-      if (data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
+      if (!isEdit && data.length === 1) setForm((f) => ({ ...f, labId: data[0].id }));
     } catch {
       if (!isCancelled()) setLabs([]);
     }
@@ -64,6 +91,13 @@ export default function AddEquipment() {
     setError(''); setSuccess(''); setBusy(true);
     try {
       const payload = { ...form, labId: Number(form.labId) };
+      if (isEdit) {
+        const { data } = await itemApi.update(id, payload);
+        navigate('/admin/equipment', {
+          state: { flash: `"${data.name}" updated.` },
+        });
+        return;
+      }
       const { data } = await itemApi.create(payload);
       setSuccess(`"${data.name}" added. Students can now book it.`);
       setForm({ ...EMPTY, labId: form.labId }); // keep lab selection
@@ -82,15 +116,19 @@ export default function AddEquipment() {
     <div className="container add-eq-wrap">
       <div className="add-eq-head">
         <div>
-          <h1 className="page-title">Add Lab Item</h1>
+          <h1 className="page-title">{isEdit ? 'Edit Lab Item' : 'Add Lab Item'}</h1>
           <p className="page-sub">
-            Register a new item in any lab. Students can book it once its status
-            is <em>Available</em>.
+            {isEdit ? (
+              <>Update this item's details. Changes apply to the catalogue immediately.</>
+            ) : (
+              <>Register a new item in any lab. Students can book it once its status
+                is <em>Available</em>.</>
+            )}
           </p>
         </div>
         <div className="add-eq-badge">
           <span className="add-eq-badge-dot" />
-          Admin · Catalogue
+          Admin · {isEdit ? 'Edit item' : 'Catalogue'}
         </div>
       </div>
 
@@ -115,12 +153,16 @@ export default function AddEquipment() {
             </div>
             <div className="field">
               <label>Lab <span className="req">*</span></label>
-              <select value={form.labId} required onChange={set('labId')} disabled={labs.length === 0}>
+              <select value={form.labId} required onChange={set('labId')}
+                      disabled={labs.length === 0 || isEdit}>
                 <option value="">— Select a lab —</option>
                 {labs.map((l) => (
                   <option key={l.id} value={l.id}>{l.name}{l.location ? ` — ${l.location}` : ''}</option>
                 ))}
               </select>
+              {isEdit && (
+                <span className="field-hint">An item can't be moved between labs after creation.</span>
+              )}
             </div>
           </div>
 
@@ -229,13 +271,20 @@ export default function AddEquipment() {
           </div>
 
           <div className="add-eq-actions">
-            <button type="button" className="btn-pill btn-pill-ghost"
-                    onClick={() => { setForm({ ...EMPTY, labId: form.labId }); setError(''); setSuccess(''); }}>
-              Reset form
-            </button>
+            {isEdit ? (
+              <button type="button" className="btn-pill btn-pill-ghost"
+                      onClick={() => navigate('/admin/equipment')}>
+                Cancel
+              </button>
+            ) : (
+              <button type="button" className="btn-pill btn-pill-ghost"
+                      onClick={() => { setForm({ ...EMPTY, labId: form.labId }); setError(''); setSuccess(''); }}>
+                Reset form
+              </button>
+            )}
             <button type="submit" className="btn-pill btn-pill-solid btn-pill-lg"
                     disabled={busy || !form.labId}>
-              {busy ? 'Saving…' : 'Add to Catalogue →'}
+              {busy ? 'Saving…' : isEdit ? 'Save changes →' : 'Add to Catalogue →'}
             </button>
           </div>
         </form>

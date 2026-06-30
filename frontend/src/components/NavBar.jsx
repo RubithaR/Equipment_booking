@@ -8,6 +8,7 @@ export default function NavBar() {
   const nav = useNavigate();
   const user = getCurrentUser();
   const [cartCount, setCartCount] = useState(cartSize());
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => subscribeCart((items) => setCartCount(items.length)), []);
   if (!user) return null;
 
@@ -43,7 +44,20 @@ export default function NavBar() {
           </div>
         </div>
 
-        <div className="nav-links">
+        <button
+          type="button"
+          className={`nav-toggle ${menuOpen ? 'open' : ''}`}
+          aria-label="Toggle navigation menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((o) => !o)}
+        >
+          <span className="nav-toggle-bar" />
+          <span className="nav-toggle-bar" />
+          <span className="nav-toggle-bar" />
+        </button>
+
+        <div className={`nav-collapse ${menuOpen ? 'open' : ''}`}>
+        <div className="nav-links" onClick={() => setMenuOpen(false)}>
           {role === 'STUDENT' && (
             <>
               <NavLink to="/student/equipment">Equipment</NavLink>
@@ -104,6 +118,7 @@ export default function NavBar() {
             </div>
           </div>
           <button className="btn-logout" onClick={doLogout}>Logout</button>
+        </div>
         </div>
       </div>
     </nav>

@@ -147,6 +147,10 @@ export const chatApi = {
   listMine: () => api.get('/api/chats'),
   messages: (conversationId) => api.get(`/api/chats/${conversationId}/messages`),
   send: (conversationId, body) => api.post(`/api/chats/${conversationId}/messages`, { body }),
+  edit: (conversationId, messageId, body) =>
+    api.patch(`/api/chats/${conversationId}/messages/${messageId}`, { body }),
+  remove: (conversationId, messageId) =>
+    api.delete(`/api/chats/${conversationId}/messages/${messageId}`),
 };
 
 export default api;

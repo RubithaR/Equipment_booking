@@ -306,8 +306,8 @@ export default function BookCart() {
                       {' '}<span className="req">*</span>
                     </label>
                     {itemSlots(l.itemId).map((slot, idx) => (
-                      <div key={idx} className="field-row" style={{ gap: 6, marginBottom: 6, alignItems: 'flex-end' }}>
-                        <div className="field" style={{ flex: 1.4, margin: 0 }}>
+                      <div key={idx} style={{ marginBottom: 10 }}>
+                        <div className="field" style={{ margin: 0, marginBottom: 6 }}>
                           <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>Date</label>
                           <input type="date" value={slot.date}
                                  min={startDate ? startDate.slice(0, 10) : undefined}
@@ -315,18 +315,20 @@ export default function BookCart() {
                                  disabled={!datesValid}
                                  onChange={(e) => updateSlot(l.itemId, idx, 'date', e.target.value)} />
                         </div>
-                        <div className="field" style={{ flex: 1, margin: 0 }}>
-                          <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>From</label>
-                          <input type="time" value={slot.from}
-                                 disabled={!datesValid}
-                                 onChange={(e) => updateSlot(l.itemId, idx, 'from', e.target.value)} />
-                        </div>
-                        <div className="field" style={{ flex: 1, margin: 0 }}>
-                          <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>To</label>
-                          <input type="time" value={slot.to}
-                                 min={slot.from || undefined}
-                                 disabled={!datesValid}
-                                 onChange={(e) => updateSlot(l.itemId, idx, 'to', e.target.value)} />
+                        <div className="field-row" style={{ marginBottom: 6, alignItems: 'flex-end' }}>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>From</label>
+                            <input type="time" lang="en-GB" value={slot.from}
+                                   disabled={!datesValid}
+                                   onChange={(e) => updateSlot(l.itemId, idx, 'from', e.target.value)} />
+                          </div>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>To</label>
+                            <input type="time" lang="en-GB" value={slot.to}
+                                   min={slot.from || undefined}
+                                   disabled={!datesValid}
+                                   onChange={(e) => updateSlot(l.itemId, idx, 'to', e.target.value)} />
+                          </div>
                         </div>
                         <button type="button" className="btn btn-secondary btn-sm"
                                 title="Remove this time"

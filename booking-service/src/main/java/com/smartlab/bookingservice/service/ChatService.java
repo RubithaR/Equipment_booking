@@ -16,6 +16,7 @@ import com.smartlab.security.CurrentUser;
 import com.smartlab.security.UserContext;
 import com.smartlab.security.exception.AuthorizationException;
 import com.smartlab.security.exception.BadRequestException;
+import com.smartlab.security.exception.ConflictException;
 import com.smartlab.security.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -144,6 +145,27 @@ public class ChatService {
         return MessageResponse.from(saved, me);
     }
 
+    /** Edit the text of a message — only the sender may do this. Stamps {@code editedAt}. */
+    @Transactional
+    public MessageResponse editMessage(Long conversationId, Long messageId, String body) {
+        Long me = CurrentUser.require().userId();
+        if (body == null || body.isBlank()) {
+            throw new BadRequestException("Message cannot be empty");
+        }
+        ChatMessage m = requireOwnMessage(conversationId, messageId, me);
+        m.setBody(body.trim());
+        m.setEditedAt(Instant.now());
+        return MessageResponse.from(messages.save(m), me);
+    }
+
+    /** Delete a message — only the sender may do this. Hard delete. */
+    @Transactional
+    public void deleteMessage(Long conversationId, Long messageId) {
+        Long me = CurrentUser.require().userId();
+        ChatMessage m = requireOwnMessage(conversationId, messageId, me);
+        messages.delete(m);
+    }
+
     // ===== helpers =====
 
     private ChatConversation requireParticipant(Long conversationId, Long me) {
@@ -153,6 +175,19 @@ public class ChatService {
             throw new AuthorizationException("You are not a participant in this conversation");
         }
         return c;
+    }
+
+    /** Load a message and assert the current user owns it and it belongs to this thread. */
+    private ChatMessage requireOwnMessage(Long conversationId, Long messageId, Long me) {
+        ChatMessage m = messages.findById(messageId)
+                .orElseThrow(() -> new NotFoundException("Message not found: " + messageId));
+        if (!m.getConversationId().equals(conversationId)) {
+            throw new ConflictException("Message " + messageId + " does not belong to this conversation");
+        }
+        if (!me.equals(m.getSenderUserId())) {
+            throw new AuthorizationException("You can only edit or delete your own messages");
+        }
+        return m;
     }
 
     private void markRead(ChatConversation c, Long me) {

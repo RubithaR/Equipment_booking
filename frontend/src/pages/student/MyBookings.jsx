@@ -22,6 +22,7 @@ export default function MyBookings() {
   const [labMap, setLabMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [tab, setTab] = useState('active');
 
   const load = async (isCancelled) => {
     setLoading(true);
@@ -66,15 +67,42 @@ export default function MyBookings() {
       {loading ? <div className="loading">Loading…</div> : (
         bookings.length === 0 ? (
           <div className="empty"><div className="empty-icon">📅</div>No bookings yet. Browse equipment to make your first booking.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {bookings.map((b) => (
-              <BookingCard key={b.id} booking={b}
-                           itemMap={itemMap} labMap={labMap}
-                           onCancel={() => cancel(b.id)} />
-            ))}
-          </div>
-        )
+        ) : (() => {
+          const active = bookings.filter((b) => ACTIVE_UMBRELLA.has(b.state));
+          const completed = bookings.filter((b) => !ACTIVE_UMBRELLA.has(b.state));
+          const shown = tab === 'active' ? active : completed;
+          return (
+            <>
+              <div className="tabs">
+                <button className={`tab ${tab === 'active' ? 'active' : ''}`}
+                        onClick={() => setTab('active')}>
+                  In progress ({active.length})
+                </button>
+                <button className={`tab ${tab === 'completed' ? 'active' : ''}`}
+                        onClick={() => setTab('completed')}>
+                  Completed ({completed.length})
+                </button>
+              </div>
+
+              {shown.length === 0 ? (
+                <div className="empty">
+                  <div className="empty-icon">📅</div>
+                  {tab === 'active'
+                    ? 'No bookings in progress right now.'
+                    : 'No completed bookings yet.'}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {shown.map((b) => (
+                    <BookingCard key={b.id} booking={b}
+                                 itemMap={itemMap} labMap={labMap}
+                                 onCancel={() => cancel(b.id)} />
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()
       )}
     </div>
   );

@@ -16,6 +16,7 @@ import com.smartlab.notificationclient.InMemoryNotifier;
 import com.smartlab.bookingservice.repository.BookingEventRepository;
 import com.smartlab.bookingservice.repository.BookingItemRepository;
 import com.smartlab.bookingservice.repository.BookingRepository;
+import com.smartlab.bookingservice.service.ChatService;
 import com.smartlab.security.UserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ class TransitionEngineTest {
     @Mock UserClient              userClient;
     @Mock ItemClient              itemClient;
     @Mock LabClient               labClient;
+    @Mock ChatService             chatService;
 
     InMemoryNotifier<NotificationEvent> notifier = new InMemoryNotifier<>();
     BookingAuthorizer authorizer = new BookingAuthorizer();
@@ -60,7 +62,7 @@ class TransitionEngineTest {
     @BeforeEach
     void setUp() {
         engine = new TransitionEngine(bookingRepository, itemRepository, eventRepository,
-                userClient, itemClient, labClient, notifier, authorizer);
+                userClient, itemClient, labClient, notifier, authorizer, chatService);
         notifier.clear();
     }
 

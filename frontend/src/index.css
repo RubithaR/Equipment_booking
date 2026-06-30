@@ -2151,6 +2151,47 @@ table td:first-child {
 .chat-bubble-body { font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
 .chat-bubble-time { font-size: 10px; opacity: 0.7; margin-top: 4px; text-align: right; }
 
+/* Per-message edit/delete — revealed on hover of your own bubble */
+.chat-actions {
+  display: flex; gap: 12px; justify-content: flex-end;
+  margin-top: 4px;
+  opacity: 0; transition: opacity 0.12s;
+}
+.chat-row:hover .chat-actions { opacity: 1; }
+.chat-action-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.8);
+}
+.chat-action-btn:hover { color: #fff; text-decoration: underline; }
+.chat-action-btn:disabled { opacity: 0.5; cursor: not-allowed; text-decoration: none; }
+.chat-action-btn.strong { color: #fff; }
+
+/* Inline edit box inside a bubble */
+.chat-edit { display: flex; flex-direction: column; gap: 8px; }
+.chat-edit input {
+  min-width: 240px;
+  border: none; border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px; font-family: inherit;
+  color: var(--text); background: #fff;
+  outline: none;
+}
+.chat-edit-actions { display: flex; gap: 14px; justify-content: flex-end; }
+
+/* Preview of the message inside the delete-confirmation modal */
+.chat-delete-preview {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--bg);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px; line-height: 1.4;
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 160px; overflow-y: auto;
+}
+
 .chat-input {
   display: flex; gap: 10px;
   padding: 14px 16px;

@@ -41,4 +41,20 @@ public class ChatController {
                                                 @Valid @RequestBody SendMessageRequest request) {
         return ResponseEntity.ok(chatService.sendMessage(conversationId, request.getBody()));
     }
+
+    /** Edit one of my own messages. */
+    @PatchMapping("/{conversationId}/messages/{messageId}")
+    public ResponseEntity<MessageResponse> edit(@PathVariable Long conversationId,
+                                                @PathVariable Long messageId,
+                                                @Valid @RequestBody SendMessageRequest request) {
+        return ResponseEntity.ok(chatService.editMessage(conversationId, messageId, request.getBody()));
+    }
+
+    /** Delete one of my own messages. */
+    @DeleteMapping("/{conversationId}/messages/{messageId}")
+    public ResponseEntity<Void> delete(@PathVariable Long conversationId,
+                                       @PathVariable Long messageId) {
+        chatService.deleteMessage(conversationId, messageId);
+        return ResponseEntity.noContent().build();
+    }
 }

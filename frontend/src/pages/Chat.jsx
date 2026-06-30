@@ -16,6 +16,9 @@ export default function Chat() {
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [pendingDelete, setPendingDelete] = useState(null);
   const scrollRef = useRef(null);
 
   const active = conversations.find((c) => c.id === activeId) || null;
@@ -85,15 +88,51 @@ export default function Chat() {
     const body = draft.trim();
     if (!body || sending || !activeId) return;
     setSending(true);
+    setError('');
     try {
       const { data } = await chatApi.send(activeId, body);
       setMessages((prev) => [...prev, data]);
       setDraft('');
       loadConversations();
     } catch (err) {
-      alert(errMsg(err));
+      setError(errMsg(err));
     } finally {
       setSending(false);
+    }
+  };
+
+  const startEdit = (m) => { setEditingId(m.id); setEditDraft(m.body); };
+  const cancelEdit = () => { setEditingId(null); setEditDraft(''); };
+
+  const saveEdit = async (e) => {
+    e.preventDefault();
+    const body = editDraft.trim();
+    if (!body) return;
+    setError('');
+    try {
+      const { data } = await chatApi.edit(activeId, editingId, body);
+      setMessages((prev) => prev.map((x) => (x.id === data.id ? data : x)));
+      cancelEdit();
+      loadConversations();
+    } catch (err) {
+      setError(errMsg(err));
+    }
+  };
+
+  // Delete is confirmed via an in-page modal (no browser popups).
+  const confirmDelete = async () => {
+    const m = pendingDelete;
+    if (!m) return;
+    setError('');
+    try {
+      await chatApi.remove(activeId, m.id);
+      setMessages((prev) => prev.filter((x) => x.id !== m.id));
+      if (editingId === m.id) cancelEdit();
+      loadConversations();
+    } catch (err) {
+      setError(errMsg(err));
+    } finally {
+      setPendingDelete(null);
     }
   };
 
@@ -150,8 +189,35 @@ export default function Chat() {
                   messages.map((m) => (
                     <div key={m.id} className={`chat-row ${m.mine ? 'mine' : 'theirs'}`}>
                       <div className="chat-bubble">
-                        <div className="chat-bubble-body">{m.body}</div>
-                        <div className="chat-bubble-time">{new Date(m.createdAt).toLocaleString()}</div>
+                        {editingId === m.id ? (
+                          <form className="chat-edit" onSubmit={saveEdit}>
+                            <input
+                              type="text"
+                              value={editDraft}
+                              maxLength={2000}
+                              autoFocus
+                              onChange={(e) => setEditDraft(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Escape') cancelEdit(); }}
+                            />
+                            <div className="chat-edit-actions">
+                              <button type="button" className="chat-action-btn" onClick={cancelEdit}>Cancel</button>
+                              <button type="submit" className="chat-action-btn strong" disabled={!editDraft.trim()}>Save</button>
+                            </div>
+                          </form>
+                        ) : (
+                          <>
+                            <div className="chat-bubble-body">{m.body}</div>
+                            <div className="chat-bubble-time">
+                              {new Date(m.createdAt).toLocaleString()}{m.editedAt ? ' · edited' : ''}
+                            </div>
+                            {m.mine && (
+                              <div className="chat-actions">
+                                <button className="chat-action-btn" onClick={() => startEdit(m)}>Edit</button>
+                                <button className="chat-action-btn" onClick={() => setPendingDelete(m)}>Delete</button>
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                   ))
@@ -174,6 +240,26 @@ export default function Chat() {
           )}
         </section>
       </div>
+
+      {pendingDelete && (
+        <div className="modal-overlay" onClick={() => setPendingDelete(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Delete message?</h2>
+            <p style={{ color: 'var(--muted)', margin: '0 0 14px' }}>
+              This message will be removed for both of you and can&apos;t be undone.
+            </p>
+            <blockquote className="chat-delete-preview">{pendingDelete.body}</blockquote>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setPendingDelete(null)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-danger" onClick={confirmDelete}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

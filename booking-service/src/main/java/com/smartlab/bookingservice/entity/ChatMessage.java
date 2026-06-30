@@ -30,4 +30,8 @@ public class ChatMessage {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    /** Set the first time the sender edits this message; null means never edited. */
+    @Column(name = "edited_at")
+    private Instant editedAt;
 }

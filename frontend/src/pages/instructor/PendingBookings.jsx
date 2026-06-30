@@ -213,6 +213,7 @@ function ReviewModal({ action, bookingId, line, onClose, onSubmit }) {
   const [ticked, setTicked] = useState(() => new Set());   // set of slot.at strings the instructor is available for
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const toggle = (at) => setTicked((prev) => {
     const next = new Set(prev);
@@ -222,19 +223,20 @@ function ReviewModal({ action, bookingId, line, onClose, onSubmit }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    setFormError('');
     if (!isApprove) {
-      if (!reason.trim()) { alert('Please give a reason for rejecting.'); return; }
+      if (!reason.trim()) { setFormError('Please give a reason for rejecting.'); return; }
       setBusy(true);
       try { await onSubmit({ reason }); } finally { setBusy(false); }
       return;
     }
     if (labOnly) {
       const confirmedSlots = [...ticked];
-      if (confirmedSlots.length === 0) { alert('Tick at least one time you are available for.'); return; }
+      if (confirmedSlots.length === 0) { setFormError('Tick at least one time you are available for.'); return; }
       setBusy(true);
       try { await onSubmit({ confirmedSlots, pickupNote }); } finally { setBusy(false); }
     } else {
-      if (!pickupAt) { alert('Set a pickup date & time.'); return; }
+      if (!pickupAt) { setFormError('Set a pickup date & time.'); return; }
       setBusy(true);
       try { await onSubmit({ pickupAt, pickupNote }); } finally { setBusy(false); }
     }
@@ -306,6 +308,13 @@ function ReviewModal({ action, bookingId, line, onClose, onSubmit }) {
               <textarea rows="3" value={reason}
                         onChange={(e) => setReason(e.target.value)} />
             </div>
+          )}
+          {formError && (
+            <div style={{
+              marginTop: 12, padding: '14px 18px', borderRadius: 6, fontSize: 14,
+              background: 'var(--danger-bg)', color: 'var(--danger)',
+              border: '1px solid var(--danger)', borderLeftWidth: 3,
+            }}>{formError}</div>
           )}
           <div className="modal-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>

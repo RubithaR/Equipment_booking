@@ -35,7 +35,7 @@ each part of the system small, independent, and easy to maintain by using a
 
 ![SmartLab architecture](architecture.png)
 
-*[ARCHITECTURE.md](ARCHITECTURE.md)*
+![ARCHITECTURE.md](ARCHITECTURE.md)
 
 The **React app** in the browser sends every request to **one API Gateway**. The
 gateway forwards each request to the correct **service**. Services find each other through the
